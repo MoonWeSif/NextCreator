@@ -1,4 +1,6 @@
-import { Settings, Trash2, Download, Upload, Undo2, Redo2, HelpCircle, Server, HardDrive } from "lucide-react";
+import { useState } from "react";
+import { Settings, Trash2, Download, Upload, Undo2, Redo2, HelpCircle, Server, HardDrive, AlertTriangle } from "lucide-react";
+import { createPortal } from "react-dom";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useFlowStore } from "@/stores/flowStore";
 import { useStorageManagementStore } from "@/stores/storageManagementStore";
@@ -16,6 +18,14 @@ export function Toolbar({ onOpenHelp }: { onOpenHelp?: () => void }) {
   const canUndo = useFlowStore((state) => state.canUndo);
   const canRedo = useFlowStore((state) => state.canRedo);
   const { openModal: openStorageModal } = useStorageManagementStore();
+
+  // 清空画布确认对话框状态
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+
+  const handleClearCanvas = () => {
+    clearCanvas();
+    setShowClearConfirm(false);
+  };
 
   // 导出工作流
   const handleExport = async () => {
@@ -167,11 +177,7 @@ export function Toolbar({ onOpenHelp }: { onOpenHelp?: () => void }) {
         <div className="tooltip tooltip-bottom" data-tip="清空画布">
           <button
             className="btn btn-ghost btn-sm text-error gap-2"
-            onClick={() => {
-              if (confirm("确定要清空画布吗？")) {
-                clearCanvas();
-              }
-            }}
+            onClick={() => setShowClearConfirm(true)}
           >
             <Trash2 className="w-4 h-4" />
             清空
@@ -202,6 +208,43 @@ export function Toolbar({ onOpenHelp }: { onOpenHelp?: () => void }) {
           </button>
         </div>
       </div>
+
+      {/* 清空画布确认对话框 */}
+      {showClearConfirm &&
+        createPortal(
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+            <div
+              className="absolute inset-0 bg-black/50"
+              onClick={() => setShowClearConfirm(false)}
+            />
+            <div className="relative bg-base-100 rounded-xl p-5 mx-4 max-w-sm shadow-xl">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 bg-error/10 rounded-lg">
+                  <AlertTriangle className="w-5 h-5 text-error" />
+                </div>
+                <h3 className="font-semibold">确认清空</h3>
+              </div>
+              <p className="text-sm text-base-content/70 mb-5">
+                确定要清空画布吗？这将删除画布上的所有节点和连线，此操作不可撤销。
+              </p>
+              <div className="flex gap-2 justify-end">
+                <button
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => setShowClearConfirm(false)}
+                >
+                  取消
+                </button>
+                <button
+                  className="btn btn-error btn-sm"
+                  onClick={handleClearCanvas}
+                >
+                  确认清空
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

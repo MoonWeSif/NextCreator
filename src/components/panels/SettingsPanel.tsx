@@ -10,6 +10,7 @@ import {
   CheckCircle,
   AlertCircle,
   Info,
+  AlertTriangle,
 } from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useSettingsStore } from "@/stores/settingsStore";
@@ -23,6 +24,9 @@ import {
   type UpdateInfo,
 } from "@/services/updateService";
 
+// 更新按钮状态类型
+type UpdateButtonState = "idle" | "checking" | "latest" | "hasUpdate" | "error";
+
 export function SettingsPanel() {
   const {
     settings,
@@ -35,9 +39,11 @@ export function SettingsPanel() {
   const [localTheme, setLocalTheme] = useState<AppSettings["theme"]>(
     settings.theme
   );
-  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [updateButtonState, setUpdateButtonState] =
+    useState<UpdateButtonState>("idle");
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
-  const [updateError, setUpdateError] = useState<string | null>(null);
+  // 重置确认对话框
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   if (!isSettingsOpen) return null;
 
@@ -49,6 +55,7 @@ export function SettingsPanel() {
   const handleReset = () => {
     resetSettings();
     setLocalTheme(useSettingsStore.getState().settings.theme);
+    setShowResetConfirm(false);
   };
 
   const handleOpenProviders = () => {
@@ -57,19 +64,26 @@ export function SettingsPanel() {
   };
 
   const handleCheckUpdate = async () => {
-    setIsCheckingUpdate(true);
-    setUpdateError(null);
+    setUpdateButtonState("checking");
     setUpdateInfo(null);
 
     try {
       const info = await checkForUpdates();
       setUpdateInfo(info);
-    } catch (error) {
-      setUpdateError(
-        error instanceof Error ? error.message : "检测更新失败，请稍后重试"
-      );
-    } finally {
-      setIsCheckingUpdate(false);
+      setUpdateButtonState(info.hasUpdate ? "hasUpdate" : "latest");
+
+      // 如果已是最新版本，3秒后恢复按钮状态
+      if (!info.hasUpdate) {
+        setTimeout(() => {
+          setUpdateButtonState("idle");
+        }, 3000);
+      }
+    } catch {
+      setUpdateButtonState("error");
+      // 错误状态 3 秒后恢复
+      setTimeout(() => {
+        setUpdateButtonState("idle");
+      }, 3000);
     }
   };
 
@@ -83,9 +97,45 @@ export function SettingsPanel() {
     }
   };
 
+  // 获取更新按钮的样式和内容
+  const getUpdateButtonProps = () => {
+    switch (updateButtonState) {
+      case "checking":
+        return {
+          className: "btn btn-outline w-full gap-2",
+          disabled: true,
+          icon: <RefreshCw className="w-4 h-4 animate-spin" />,
+          text: "正在检测...",
+        };
+      case "latest":
+        return {
+          className: "btn btn-success w-full gap-2",
+          disabled: false,
+          icon: <CheckCircle className="w-4 h-4" />,
+          text: "已是最新版本",
+        };
+      case "error":
+        return {
+          className: "btn btn-error btn-outline w-full gap-2",
+          disabled: false,
+          icon: <AlertCircle className="w-4 h-4" />,
+          text: "检测失败",
+        };
+      default:
+        return {
+          className: "btn btn-outline w-full gap-2",
+          disabled: false,
+          icon: <RefreshCw className="w-4 h-4" />,
+          text: "检测更新",
+        };
+    }
+  };
+
+  const updateButtonProps = getUpdateButtonProps();
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 animate-fade-in">
-      <div className="bg-base-100 rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden max-h-[90vh] flex flex-col">
+      <div className="bg-base-100 rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden max-h-[90vh] flex flex-col relative">
         {/* 头部 */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-base-300">
           <h2 className="text-lg font-semibold">设置</h2>
@@ -191,80 +241,51 @@ export function SettingsPanel() {
 
             {/* 检测更新按钮 */}
             <button
-              className={`btn btn-outline w-full gap-2 ${
-                isCheckingUpdate ? "loading" : ""
-              }`}
+              className={updateButtonProps.className}
               onClick={handleCheckUpdate}
-              disabled={isCheckingUpdate}
+              disabled={updateButtonProps.disabled}
             >
-              <RefreshCw
-                className={`w-4 h-4 ${isCheckingUpdate ? "animate-spin" : ""}`}
-              />
-              {isCheckingUpdate ? "正在检测..." : "检测更新"}
+              {updateButtonProps.icon}
+              {updateButtonProps.text}
             </button>
 
-            {/* 更新结果显示 */}
-            {updateInfo && (
-              <div
-                className={`p-4 rounded-xl ${
-                  updateInfo.hasUpdate
-                    ? "bg-warning/10 border border-warning/20"
-                    : "bg-success/10 border border-success/20"
-                }`}
-              >
-                {updateInfo.hasUpdate ? (
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <AlertCircle className="w-5 h-5 text-warning" />
-                      <span className="font-medium text-warning">
-                        发现新版本
+            {/* 有新版本时显示更新信息 */}
+            {updateButtonState === "hasUpdate" && updateInfo && (
+              <div className="p-4 rounded-xl bg-warning/10 border border-warning/20">
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="w-5 h-5 text-warning" />
+                    <span className="font-medium text-warning">发现新版本</span>
+                  </div>
+                  <div className="text-sm space-y-1">
+                    <div className="flex justify-between">
+                      <span className="text-base-content/70">当前版本:</span>
+                      <span>v{updateInfo.currentVersion}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-base-content/70">最新版本:</span>
+                      <span className="text-warning font-medium">
+                        v{updateInfo.latestVersion}
                       </span>
                     </div>
-                    <div className="text-sm space-y-1">
+                    {updateInfo.publishedAt && (
                       <div className="flex justify-between">
-                        <span className="text-base-content/70">当前版本:</span>
-                        <span>v{updateInfo.currentVersion}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-base-content/70">最新版本:</span>
-                        <span className="text-warning font-medium">
-                          v{updateInfo.latestVersion}
+                        <span className="text-base-content/70">发布时间:</span>
+                        <span>
+                          {new Date(updateInfo.publishedAt).toLocaleDateString(
+                            "zh-CN"
+                          )}
                         </span>
                       </div>
-                      {updateInfo.publishedAt && (
-                        <div className="flex justify-between">
-                          <span className="text-base-content/70">发布时间:</span>
-                          <span>
-                            {new Date(updateInfo.publishedAt).toLocaleDateString(
-                              "zh-CN"
-                            )}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                    <button
-                      className="btn btn-warning btn-sm w-full gap-2"
-                      onClick={handleOpenRelease}
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                      前往下载
-                    </button>
+                    )}
                   </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <CheckCircle className="w-5 h-5 text-success" />
-                    <span className="text-success">已是最新版本</span>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* 错误显示 */}
-            {updateError && (
-              <div className="p-4 rounded-xl bg-error/10 border border-error/20">
-                <div className="flex items-center gap-2">
-                  <AlertCircle className="w-5 h-5 text-error" />
-                  <span className="text-error text-sm">{updateError}</span>
+                  <button
+                    className="btn btn-warning btn-sm w-full gap-2"
+                    onClick={handleOpenRelease}
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    前往下载
+                  </button>
                 </div>
               </div>
             )}
@@ -273,7 +294,10 @@ export function SettingsPanel() {
 
         {/* 底部 */}
         <div className="flex items-center justify-between px-6 py-4 border-t border-base-300 bg-base-200/50">
-          <button className="btn btn-ghost gap-2" onClick={handleReset}>
+          <button
+            className="btn btn-ghost gap-2"
+            onClick={() => setShowResetConfirm(true)}
+          >
             <RotateCcw className="w-4 h-4" />
             重置
           </button>
@@ -287,6 +311,34 @@ export function SettingsPanel() {
             </button>
           </div>
         </div>
+
+        {/* 重置确认对话框 */}
+        {showResetConfirm && (
+          <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-10 rounded-2xl">
+            <div className="bg-base-100 rounded-xl p-5 mx-4 max-w-sm shadow-xl">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 bg-error/10 rounded-lg">
+                  <AlertTriangle className="w-5 h-5 text-error" />
+                </div>
+                <h3 className="font-semibold">确认重置</h3>
+              </div>
+              <p className="text-sm text-base-content/70 mb-5">
+                确定要重置所有设置吗？这将清除所有供应商配置和节点分配，此操作不可撤销。
+              </p>
+              <div className="flex gap-2 justify-end">
+                <button
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => setShowResetConfirm(false)}
+                >
+                  取消
+                </button>
+                <button className="btn btn-error btn-sm" onClick={handleReset}>
+                  确认重置
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
