@@ -13,7 +13,11 @@ import {
 } from "@xyflow/react";
 import { v4 as uuidv4 } from "uuid";
 import type { CustomNode, CustomEdge, CustomNodeData } from "@/types";
+import type { WorkflowExecutionContext } from "@/types/workflow";
 import { validateConnection } from "@/utils/connectionValidator";
+import { WorkflowEngine } from "@/services/workflowEngine";
+import { useCanvasStore } from "@/stores/canvasStore";
+import { toast } from "@/stores/toastStore";
 
 // 历史记录状态（用于撤销/重做）
 interface HistoryState {
@@ -109,6 +113,28 @@ interface FlowStore {
     mimeType?: string;
     fileData: string;
   }>;
+
+  // === 工作流执行 ===
+  workflowExecution: WorkflowExecutionContext | null;
+  workflowEngine: WorkflowEngine | null;
+
+  // 执行整个工作流
+  executeWorkflow: () => Promise<void>;
+
+  // 从指定节点开始执行
+  executeFromNode: (nodeId: string) => Promise<void>;
+
+  // 暂停工作流
+  pauseWorkflow: () => void;
+
+  // 恢复工作流
+  resumeWorkflow: () => void;
+
+  // 取消工作流
+  cancelWorkflow: () => void;
+
+  // 清除工作流状态
+  clearWorkflowExecution: () => void;
 }
 
 export const useFlowStore = create<FlowStore>((set, get) => ({
@@ -824,5 +850,160 @@ export const useFlowStore = create<FlowStore>((set, get) => ({
     }
 
     return files;
+  },
+
+  // === 工作流执行状态和方法 ===
+  workflowExecution: null,
+  workflowEngine: null,
+
+  executeWorkflow: async () => {
+    const { nodes, edges } = get();
+    const { activeCanvasId } = useCanvasStore.getState();
+
+    if (!activeCanvasId) {
+      toast.error("画布未初始化");
+      return;
+    }
+
+    if (nodes.length === 0) {
+      toast.error("画布为空，无法执行");
+      return;
+    }
+
+    // 创建新的工作流引擎实例
+    const engine = new WorkflowEngine({
+      maxParallelNodes: 3,
+      skipInputNodes: true,
+    });
+
+    // 订阅状态变更
+    const unsubscribe = engine.onStatusChange((context) => {
+      set({ workflowExecution: context });
+    });
+
+    set({
+      workflowEngine: engine,
+      workflowExecution: {
+        status: "running",
+        nodeStatuses: {},
+        errors: {},
+        progress: { completed: 0, total: 0 },
+      },
+    });
+
+    try {
+      const result = await engine.executeWorkflow(
+        nodes as CustomNode[],
+        edges,
+        activeCanvasId
+      );
+
+      set({ workflowExecution: result });
+
+      // 显示结果通知
+      if (result.status === "completed") {
+        toast.success(`工作流执行完成 (${result.progress.completed}/${result.progress.total})`);
+      } else if (result.status === "error") {
+        const errorCount = Object.keys(result.errors).length;
+        toast.error(`工作流执行完成，${errorCount} 个节点失败`);
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "执行失败";
+      toast.error(`工作流执行失败: ${errorMessage}`);
+    } finally {
+      unsubscribe();
+      set({ workflowEngine: null });
+    }
+  },
+
+  executeFromNode: async (nodeId: string) => {
+    const { nodes, edges } = get();
+    const { activeCanvasId } = useCanvasStore.getState();
+
+    if (!activeCanvasId) {
+      toast.error("画布未初始化");
+      return;
+    }
+
+    const startNode = nodes.find((n) => n.id === nodeId);
+    if (!startNode) {
+      toast.error("节点未找到");
+      return;
+    }
+
+    // 创建新的工作流引擎实例
+    const engine = new WorkflowEngine({
+      maxParallelNodes: 3,
+      skipInputNodes: true,
+    });
+
+    // 订阅状态变更
+    const unsubscribe = engine.onStatusChange((context) => {
+      set({ workflowExecution: context });
+    });
+
+    set({
+      workflowEngine: engine,
+      workflowExecution: {
+        status: "running",
+        nodeStatuses: {},
+        errors: {},
+        progress: { completed: 0, total: 0 },
+      },
+    });
+
+    try {
+      const result = await engine.executeFromNode(
+        nodeId,
+        nodes as CustomNode[],
+        edges,
+        activeCanvasId
+      );
+
+      set({ workflowExecution: result });
+
+      // 显示结果通知
+      if (result.status === "completed") {
+        toast.success(`部分工作流执行完成 (${result.progress.completed}/${result.progress.total})`);
+      } else if (result.status === "error") {
+        const errorCount = Object.keys(result.errors).length;
+        toast.error(`部分工作流执行完成，${errorCount} 个节点失败`);
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "执行失败";
+      toast.error(`工作流执行失败: ${errorMessage}`);
+    } finally {
+      unsubscribe();
+      set({ workflowEngine: null });
+    }
+  },
+
+  pauseWorkflow: () => {
+    const { workflowEngine } = get();
+    if (workflowEngine) {
+      workflowEngine.pause();
+      toast.info("工作流已暂停");
+    }
+  },
+
+  resumeWorkflow: () => {
+    const { workflowEngine } = get();
+    if (workflowEngine) {
+      workflowEngine.resume();
+      toast.info("工作流继续执行");
+    }
+  },
+
+  cancelWorkflow: () => {
+    const { workflowEngine } = get();
+    if (workflowEngine) {
+      workflowEngine.cancel();
+      toast.info("工作流已取消");
+    }
+    set({ workflowExecution: null, workflowEngine: null });
+  },
+
+  clearWorkflowExecution: () => {
+    set({ workflowExecution: null, workflowEngine: null });
   },
 }));

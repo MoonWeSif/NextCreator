@@ -74,8 +74,16 @@ function getApiConfig() {
 }
 
 // 创建视频生成任务
-export async function createVideoTask(params: VideoGenerationParams): Promise<VideoGenerationResponse> {
+export async function createVideoTask(
+  params: VideoGenerationParams,
+  signal?: AbortSignal
+): Promise<VideoGenerationResponse> {
   try {
+    // 检查是否已取消
+    if (signal?.aborted) {
+      return { error: "已取消" };
+    }
+
     // 检查是否在 Tauri 环境
     if (!isTauriEnvironment()) {
       return { error: "此功能仅在桌面应用中可用" };
@@ -94,7 +102,21 @@ export async function createVideoTask(params: VideoGenerationParams): Promise<Vi
     };
 
     console.log("[videoService] Creating video task via Tauri backend...");
+
+    // 再次检查取消状态（配置获取可能有延迟）
+    if (signal?.aborted) {
+      return { error: "已取消" };
+    }
+
     const result = await invoke<TauriVideoTaskResult>("video_create_task", { params: tauriParams });
+
+    // invoke 完成后再检查一次，虽然任务已创建，但可以尽早返回
+    if (signal?.aborted) {
+      // 注意：此时任务已经创建，但我们返回取消状态
+      // 实际的任务会在服务器上继续执行，但用户不会看到结果
+      console.log("[videoService] Task created but cancelled by user, taskId:", result.taskId);
+      return { error: "已取消" };
+    }
 
     if (!result.success) {
       return { error: result.error || "创建任务失败" };
@@ -256,11 +278,17 @@ export async function pollVideoTask(
   taskId: string,
   onProgress?: (info: VideoProgressInfo) => void,
   maxAttempts: number = 120, // 最多轮询 10 分钟（5秒间隔）
-  interval: number = 5000
+  interval: number = 5000,
+  signal?: AbortSignal
 ): Promise<VideoGenerationResponse> {
   let attempts = 0;
 
   while (attempts < maxAttempts) {
+    // 检查是否被取消
+    if (signal?.aborted) {
+      return { error: "已取消" };
+    }
+
     const statusResult = await getVideoTaskStatus(taskId);
 
     if (statusResult.error) {
@@ -288,8 +316,18 @@ export async function pollVideoTask(
       return { error: statusResult.error || "视频生成失败" };
     }
 
-    // 等待后继续轮询
-    await new Promise((resolve) => setTimeout(resolve, interval));
+    // 等待后继续轮询（可中断的等待）
+    await new Promise<void>((resolve) => {
+      const timeoutId = setTimeout(resolve, interval);
+      // 如果有 signal，监听中断事件
+      if (signal) {
+        const onAbort = () => {
+          clearTimeout(timeoutId);
+          resolve(); // 直接 resolve，让循环检查 aborted 状态
+        };
+        signal.addEventListener("abort", onAbort, { once: true });
+      }
+    });
     attempts++;
   }
 

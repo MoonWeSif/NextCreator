@@ -7,6 +7,7 @@ import { useStorageManagementStore } from "@/stores/storageManagementStore";
 import { useModal, getModalAnimationClasses } from "@/hooks/useModal";
 import { isTauriEnvironment } from "@/services/fileStorageService";
 import { toast } from "@/stores/toastStore";
+import { WorkflowControls } from "@/components/workflow/WorkflowControls";
 import logoImage from "@/assets/logo.png";
 
 export function Toolbar({ onOpenHelp }: { onOpenHelp?: () => void }) {
@@ -160,6 +161,10 @@ export function Toolbar({ onOpenHelp }: { onOpenHelp?: () => void }) {
             <Redo2 className="w-4 h-4" />
           </button>
         </div>
+        <div className="divider divider-horizontal mx-1" />
+
+        {/* 工作流控制 */}
+        <WorkflowControls />
         <div className="divider divider-horizontal mx-1" />
 
         <div className="tooltip tooltip-bottom" data-tip="导入工作流">

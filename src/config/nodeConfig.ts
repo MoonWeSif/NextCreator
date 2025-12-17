@@ -91,7 +91,7 @@ export const nodeCategories: NodeCategory[] = [
           maxTokens: 8192,
           status: "idle",
         },
-        inputs: ["prompt", "file"],
+        inputs: ["prompt", "image", "file"],
         outputs: ["prompt"],
       },
       {

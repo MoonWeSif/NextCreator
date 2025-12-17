@@ -1,7 +1,7 @@
 import { memo, useCallback, useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Handle, Position, type NodeProps, type Node } from "@xyflow/react";
-import { MessageSquareText, Play, AlertCircle, Copy, Check, FileUp, Eye, X, Settings2 } from "lucide-react";
+import { MessageSquareText, Play, AlertCircle, Copy, Check, FileUp, Eye, X, Settings2, ImageIcon } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { useFlowStore } from "@/stores/flowStore";
 import { useCanvasStore } from "@/stores/canvasStore";
@@ -14,7 +14,7 @@ import type { LLMContentNodeData } from "@/types";
 type LLMContentNode = Node<LLMContentNodeData>;
 
 export const LLMContentNode = memo(({ id, data, selected }: NodeProps<LLMContentNode>) => {
-  const { updateNodeData, getConnectedInputData, getConnectedFilesWithInfo } = useFlowStore();
+  const { updateNodeData, getConnectedInputData, getConnectedFilesWithInfo, getConnectedImagesWithInfo } = useFlowStore();
   const [copied, setCopied] = useState(false);
   const [showFullPreview, setShowFullPreview] = useState(false);
   const [isPreviewVisible, setIsPreviewVisible] = useState(false);
@@ -113,15 +113,15 @@ export const LLMContentNode = memo(({ id, data, selected }: NodeProps<LLMContent
 
   // 执行生成（支持流式）
   const handleGenerate = useCallback(async () => {
-    const { prompt, files } = getConnectedInputData(id);
+    const { prompt, files, images } = getConnectedInputData(id);
     const { activeCanvasId } = useCanvasStore.getState();
 
     canvasIdRef.current = activeCanvasId;
 
-    if (!prompt && files.length === 0) {
+    if (!prompt && files.length === 0 && images.length === 0) {
       updateNodeDataWithCanvas(id, {
         status: "error",
-        error: "请连接提示词节点或文件上传节点",
+        error: "请连接提示词节点、文件上传节点或图片输入节点",
       });
       return;
     }
@@ -133,13 +133,22 @@ export const LLMContentNode = memo(({ id, data, selected }: NodeProps<LLMContent
     });
 
     try {
+      // 将图片转换为文件格式（LLM 服务支持图片作为文件输入）
+      const imageFiles = images.map((imageData, index) => ({
+        data: imageData,
+        mimeType: imageData.startsWith("data:image/png") ? "image/png" : "image/jpeg",
+        fileName: `image-${index + 1}.${imageData.startsWith("data:image/png") ? "png" : "jpg"}`,
+      }));
+
+      const allFiles = [...files, ...imageFiles];
+
       const response = await generateLLMContent({
         prompt: prompt || "请分析这个文件的内容",
         model: data.model,
         systemPrompt: data.systemPrompt || undefined,
         temperature: data.temperature,
         maxTokens: data.maxTokens,
-        files: files.length > 0 ? files : undefined,
+        files: allFiles.length > 0 ? allFiles : undefined,
       });
 
       if (response.content) {
@@ -189,7 +198,16 @@ export const LLMContentNode = memo(({ id, data, selected }: NodeProps<LLMContent
         position={Position.Left}
         id="input-prompt"
         className="!w-3 !h-3 !bg-blue-500 !border-2 !border-white"
-        style={{ top: "30%" }}
+        style={{ top: "25%" }}
+      />
+
+      {/* 输入端口 - image 类型 */}
+      <Handle
+        type="target"
+        position={Position.Left}
+        id="input-image"
+        className="!w-3 !h-3 !bg-green-500 !border-2 !border-white"
+        style={{ top: "50%" }}
       />
 
       {/* 输入端口 - file 类型 */}
@@ -198,7 +216,7 @@ export const LLMContentNode = memo(({ id, data, selected }: NodeProps<LLMContent
         position={Position.Left}
         id="input-file"
         className="!w-3 !h-3 !bg-orange-500 !border-2 !border-white"
-        style={{ top: "70%" }}
+        style={{ top: "75%" }}
       />
 
       {/* 节点头部 */}
@@ -212,6 +230,20 @@ export const LLMContentNode = memo(({ id, data, selected }: NodeProps<LLMContent
 
       {/* 节点内容 - 简化显示 */}
       <div className="p-2 space-y-2 nodrag">
+        {/* 已连接图片指示器 */}
+        {(() => {
+          const connectedImages = getConnectedImagesWithInfo(id);
+          if (connectedImages.length === 0) return null;
+          return (
+            <div className="flex items-center gap-2 px-2 py-1.5 bg-green-500/10 rounded-lg">
+              <ImageIcon className="w-3.5 h-3.5 text-green-500" />
+              <span className="text-xs text-green-600">
+                {connectedImages.length} 张图片已连接
+              </span>
+            </div>
+          );
+        })()}
+
         {/* 已连接文件指示器 */}
         {(() => {
           const connectedFiles = getConnectedFilesWithInfo(id);
@@ -408,6 +440,8 @@ function LLMSettingsModal({ data, presetModels, onClose, onUpdateData }: LLMSett
   const [isVisible, setIsVisible] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   const [customModel, setCustomModel] = useState("");
+  // 使用本地 state 缓冲 systemPrompt，避免中文输入时因频繁更新 store 导致乱码
+  const [localSystemPrompt, setLocalSystemPrompt] = useState(data.systemPrompt || "");
 
   // 检查是否是自定义模型
   const isCustomModel = !presetModels.some((m) => m.value === data.model);
@@ -417,12 +451,16 @@ function LLMSettingsModal({ data, presetModels, onClose, onUpdateData }: LLMSett
     requestAnimationFrame(() => setIsVisible(true));
   }, []);
 
-  // 关闭时先播放退出动画
+  // 关闭时同步 systemPrompt 到 store，并播放退出动画
   const handleClose = useCallback(() => {
+    // 关闭前同步本地 systemPrompt 到 store
+    if (localSystemPrompt !== (data.systemPrompt || "")) {
+      onUpdateData({ systemPrompt: localSystemPrompt });
+    }
     setIsClosing(true);
     setIsVisible(false);
     setTimeout(onClose, 200);
-  }, [onClose]);
+  }, [onClose, localSystemPrompt, data.systemPrompt, onUpdateData]);
 
   // ESC 键关闭
   useEffect(() => {
@@ -542,8 +580,8 @@ function LLMSettingsModal({ data, presetModels, onClose, onUpdateData }: LLMSett
             <textarea
               className="textarea textarea-bordered w-full h-20 text-sm resize-none"
               placeholder="可选：设置 AI 角色或行为..."
-              value={data.systemPrompt || ""}
-              onChange={(e) => onUpdateData({ systemPrompt: e.target.value })}
+              value={localSystemPrompt}
+              onChange={(e) => setLocalSystemPrompt(e.target.value)}
             />
           </div>
 

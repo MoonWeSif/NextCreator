@@ -25,6 +25,7 @@ import {
   AlignEndHorizontal,
   Scissors,
   LayoutGrid,
+  Play,
 } from "lucide-react";
 
 import { useFlowStore } from "@/stores/flowStore";
@@ -78,6 +79,7 @@ export function FlowCanvas() {
     clearSelection,
     clipboard,
     isValidConnection,
+    executeFromNode,
   } = useFlowStore();
 
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
@@ -413,6 +415,17 @@ export function FlowCanvas() {
       }
 
       items.push(
+        { id: "divider-workflow", label: "", divider: true },
+        {
+          id: "execute-from-node",
+          label: "从此节点开始执行",
+          icon: <Play className="w-4 h-4" />,
+          onClick: () => {
+            if (contextMenu.targetId) {
+              executeFromNode(contextMenu.targetId);
+            }
+          },
+        },
         { id: "divider-delete", label: "", divider: true },
         {
           id: "delete",
