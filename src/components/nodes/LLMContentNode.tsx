@@ -7,17 +7,11 @@ import { useFlowStore } from "@/stores/flowStore";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { generateLLMContent } from "@/services/llmService";
 import { useLoadingDots } from "@/hooks/useLoadingDots";
+import { useLLMPresetModels } from "@/config/presetModels";
 import type { LLMContentNodeData } from "@/types";
 
 // 定义节点类型
 type LLMContentNode = Node<LLMContentNodeData>;
-
-// 预设模型选项
-const presetModels = [
-  { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
-  { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
-  { value: "gemini-3-pro-preview", label: "Gemini 3 Pro" },
-];
 
 export const LLMContentNode = memo(({ id, data, selected }: NodeProps<LLMContentNode>) => {
   const { updateNodeData, getConnectedInputData, getConnectedFilesWithInfo } = useFlowStore();
@@ -27,6 +21,9 @@ export const LLMContentNode = memo(({ id, data, selected }: NodeProps<LLMContent
   const [isPreviewClosing, setIsPreviewClosing] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const previewModalRef = useRef<HTMLDivElement>(null);
+
+  // 获取当前供应商的预设模型列表
+  const { presetModels } = useLLMPresetModels("llmContent");
 
   // 预览弹窗进入动画
   useEffect(() => {
@@ -309,6 +306,7 @@ export const LLMContentNode = memo(({ id, data, selected }: NodeProps<LLMContent
       {isSettingsOpen && (
         <LLMSettingsModal
           data={data}
+          presetModels={presetModels}
           onClose={() => setIsSettingsOpen(false)}
           onUpdateData={(updates) => updateNodeData<LLMContentNodeData>(id, updates)}
         />
@@ -406,11 +404,12 @@ LLMContentNode.displayName = "LLMContentNode";
 // 设置弹窗组件
 interface LLMSettingsModalProps {
   data: LLMContentNodeData;
+  presetModels: Array<{ value: string; label: string }>;
   onClose: () => void;
   onUpdateData: (updates: Partial<LLMContentNodeData>) => void;
 }
 
-function LLMSettingsModal({ data, onClose, onUpdateData }: LLMSettingsModalProps) {
+function LLMSettingsModal({ data, presetModels, onClose, onUpdateData }: LLMSettingsModalProps) {
   const [isVisible, setIsVisible] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   const [customModel, setCustomModel] = useState("");

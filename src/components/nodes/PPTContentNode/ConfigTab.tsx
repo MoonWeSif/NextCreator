@@ -1,7 +1,8 @@
 import { useRef, useState } from "react";
 import { Settings, FileText, AlignLeft, StickyNote, Cpu, ChevronDown, Check, Image } from "lucide-react";
 import type { PPTContentNodeData, PageCountRange, DetailLevel } from "./types";
-import { OUTLINE_PRESET_MODELS, IMAGE_PRESET_MODELS } from "./types";
+import { IMAGE_PRESET_MODELS } from "./types";
+import { useLLMPresetModels } from "@/config/presetModels";
 
 interface ConfigTabProps {
   config: PPTContentNodeData["outlineConfig"];
@@ -37,12 +38,15 @@ export function ConfigTab({ config, outlineModel, imageModel, onChange, onModelC
   const [showImageModelDropdown, setShowImageModelDropdown] = useState(false);
   const [customImageModel, setCustomImageModel] = useState("");
 
+  // 获取当前供应商的预设 LLM 模型列表（用于大纲生成）
+  const { presetModels: outlinePresetModels } = useLLMPresetModels("llm");
+
   // 检查是否是自定义模型
-  const isCustomModel = !OUTLINE_PRESET_MODELS.some((m) => m.value === outlineModel);
+  const isCustomModel = !outlinePresetModels.some((m) => m.value === outlineModel);
 
   // 获取显示的模型名称
   const getDisplayModelName = () => {
-    const preset = OUTLINE_PRESET_MODELS.find((m) => m.value === outlineModel);
+    const preset = outlinePresetModels.find((m) => m.value === outlineModel);
     return preset ? preset.label : outlineModel;
   };
 
@@ -218,7 +222,7 @@ export function ConfigTab({ config, outlineModel, imageModel, onChange, onModelC
         {showModelDropdown && (
           <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-base-100 border border-base-300 rounded-lg shadow-xl overflow-hidden">
             {/* 预设模型 */}
-            {OUTLINE_PRESET_MODELS.map((model) => (
+            {outlinePresetModels.map((model) => (
               <button
                 key={model.value}
                 type="button"

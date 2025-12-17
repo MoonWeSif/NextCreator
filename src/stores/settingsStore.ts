@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import type { AppSettings, SettingsState, Provider, NodeProviderMapping } from "@/types";
+import type { AppSettings, SettingsState, Provider, NodeProviderMapping, ProviderProtocol } from "@/types";
 import { tauriStorage } from "@/utils/tauriStorage";
 
 // 默认设置
@@ -9,6 +9,34 @@ const defaultSettings: AppSettings = {
   nodeProviders: {},
   theme: "light",
 };
+
+// 数据迁移：为旧版供应商数据添加 protocol 字段并处理 baseUrl
+function migrateProviders(providers: Provider[]): Provider[] {
+  return providers.map((provider) => {
+    // 如果已经有 protocol 字段，无需迁移
+    if (provider.protocol) {
+      return provider;
+    }
+
+    // 检测并处理 baseUrl 中的版本路径后缀
+    let baseUrl = provider.baseUrl || "";
+    let protocol: ProviderProtocol = "google";  // 默认使用 Google 协议
+
+    // 仅移除标准版本路径后缀（/v1beta, /v1），保留其他特殊路径
+    if (baseUrl.match(/\/v1(beta)?$/)) {
+      baseUrl = baseUrl.replace(/\/v1(beta)?$/, "");
+    }
+
+    // 移除末尾斜杠
+    baseUrl = baseUrl.replace(/\/+$/, "");
+
+    return {
+      ...provider,
+      baseUrl,
+      protocol,
+    };
+  });
+}
 
 interface SettingsStore extends SettingsState {
   // 基础设置
@@ -134,6 +162,28 @@ export const useSettingsStore = create<SettingsStore>()(
       name: "next-creator-settings",
       storage: createJSONStorage(() => tauriStorage),
       partialize: (state) => ({ settings: state.settings }),
+      // 数据迁移：在 store 恢复时执行
+      onRehydrateStorage: () => {
+        return (state, error) => {
+          if (error) {
+            console.error("[settingsStore] 数据恢复失败:", error);
+            return;
+          }
+          if (state && state.settings.providers.length > 0) {
+            // 执行供应商数据迁移
+            const migratedProviders = migrateProviders(state.settings.providers);
+            // 检查是否有变化（需要迁移）
+            const needsMigration = migratedProviders.some((p, i) => {
+              const original = state.settings.providers[i];
+              return p.protocol !== original.protocol || p.baseUrl !== original.baseUrl;
+            });
+            if (needsMigration) {
+              console.log("[settingsStore] 执行供应商数据迁移");
+              state.updateSettings({ providers: migratedProviders });
+            }
+          }
+        };
+      },
     }
   )
 );

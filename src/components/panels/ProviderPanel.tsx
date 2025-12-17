@@ -5,7 +5,21 @@ import { useSettingsStore } from "@/stores/settingsStore";
 import { Select } from "@/components/ui/Select";
 import { Input } from "@/components/ui/Input";
 import { useModal, getModalAnimationClasses } from "@/hooks/useModal";
-import type { Provider, NodeProviderMapping } from "@/types";
+import type { Provider, NodeProviderMapping, ProviderProtocol } from "@/types";
+
+// 协议类型配置
+const protocolConfig: { key: ProviderProtocol; label: string }[] = [
+  { key: "openai", label: "OpenAI" },
+  { key: "google", label: "Google" },
+  { key: "claude", label: "Claude" },
+];
+
+// 协议类型显示标签
+const protocolLabels: Record<ProviderProtocol, string> = {
+  openai: "OpenAI",
+  google: "Google",
+  claude: "Claude",
+};
 
 // 节点类型配置
 const nodeTypeConfig: { key: keyof NodeProviderMapping; label: string; description: string }[] = [
@@ -144,7 +158,12 @@ export function ProviderPanel() {
                     className="flex items-center justify-between p-3 bg-base-200 rounded-lg"
                   >
                     <div className="flex-1 min-w-0">
-                      <div className="font-medium truncate">{provider.name}</div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium truncate">{provider.name}</span>
+                        <span className="px-1.5 py-0.5 text-xs rounded bg-base-300 text-base-content/70 shrink-0">
+                          {protocolLabels[provider.protocol] || "Google"}
+                        </span>
+                      </div>
                       <div className="text-sm text-base-content/50 truncate">
                         {provider.baseUrl}
                       </div>
@@ -205,7 +224,7 @@ export function ProviderPanel() {
                         { value: "", label: "未配置" },
                         ...providers.map((provider) => ({
                           value: provider.id,
-                          label: provider.name,
+                          label: `${provider.name} (${protocolLabels[provider.protocol] || "Google"})`,
                         })),
                       ]}
                       onChange={(value) =>
@@ -283,6 +302,7 @@ function ProviderEditModal({ provider, onSave, onClose }: ProviderEditModalProps
   const [name, setName] = useState(provider?.name || "");
   const [apiKey, setApiKey] = useState(provider?.apiKey || "");
   const [baseUrl, setBaseUrl] = useState(provider?.baseUrl || "");
+  const [protocol, setProtocol] = useState<ProviderProtocol>(provider?.protocol || "google");
 
   // 使用统一的 modal hook
   const { isVisible, isClosing, handleClose, handleBackdropClick } = useModal({
@@ -302,6 +322,7 @@ function ProviderEditModal({ provider, onSave, onClose }: ProviderEditModalProps
       name: name.trim(),
       apiKey: apiKey.trim(),
       baseUrl: baseUrl.trim(),
+      protocol,
     });
   };
 
@@ -337,6 +358,27 @@ function ProviderEditModal({ provider, onSave, onClose }: ProviderEditModalProps
           </button>
         </div>
 
+        {/* 协议类型选择 Tab */}
+        <div className="px-5 pt-4">
+          <div className="flex bg-base-200 rounded-lg p-1">
+            {protocolConfig.map(({ key, label }) => (
+              <button
+                key={key}
+                className={`
+                  flex-1 py-1.5 px-3 text-sm font-medium rounded-md transition-all
+                  ${protocol === key
+                    ? "bg-base-100 text-base-content shadow-sm"
+                    : "text-base-content/60 hover:text-base-content"
+                  }
+                `}
+                onClick={() => setProtocol(key)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* 表单 */}
         <div className="p-5 space-y-4">
           {/* 名称 */}
@@ -370,10 +412,15 @@ function ProviderEditModal({ provider, onSave, onClose }: ProviderEditModalProps
               <span className="label-text font-medium">Base URL</span>
             </label>
             <Input
-              placeholder="例如：https://example.com/v1beta"
+              placeholder="例如：https://api.example.com"
               value={baseUrl}
               onChange={(e) => setBaseUrl(e.target.value)}
             />
+            <label className="label py-0.5">
+              <span className="label-text-alt text-base-content/50">
+                无需填写版本路径（如 /v1beta）
+              </span>
+            </label>
           </div>
         </div>
 

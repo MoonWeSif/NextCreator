@@ -179,12 +179,16 @@ export interface NodeDefinition {
   outputs?: string[];
 }
 
+// 供应商协议类型
+export type ProviderProtocol = 'openai' | 'google' | 'claude';
+
 // 供应商配置
 export interface Provider {
   id: string;           // 唯一标识 (uuid)
   name: string;         // 供应商名称
   apiKey: string;       // API Key
-  baseUrl: string;      // Base URL
+  baseUrl: string;      // Base URL（不包含版本路径如 /v1beta）
+  protocol: ProviderProtocol;  // API 协议类型
 }
 
 // 节点类型到供应商的映射

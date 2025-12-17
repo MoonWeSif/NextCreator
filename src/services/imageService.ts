@@ -1,6 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { invoke } from "@tauri-apps/api/core";
-import type { ImageGenerationParams, ImageEditParams, GenerationResponse } from "@/types";
+import type { ImageGenerationParams, ImageEditParams, GenerationResponse, ProviderProtocol } from "@/types";
 import { useSettingsStore } from "@/stores/settingsStore";
 
 // 图片节点类型
@@ -12,6 +12,22 @@ const isTauri = () => {
   console.log("[imageService] isTauri check:", result, "window keys:", typeof window !== "undefined" ? Object.keys(window).filter(k => k.includes("TAURI")) : []);
   return result;
 };
+
+// 根据协议类型获取完整的 API Base URL
+function getApiBaseUrl(baseUrl: string, protocol: ProviderProtocol): string {
+  const cleanBaseUrl = baseUrl.replace(/\/+$/, "");  // 移除末尾斜杠
+
+  switch (protocol) {
+    case "google":
+      return `${cleanBaseUrl}/v1beta`;
+    case "openai":
+      return `${cleanBaseUrl}/v1`;
+    case "claude":
+      return `${cleanBaseUrl}/v1`;
+    default:
+      return `${cleanBaseUrl}/v1beta`;
+  }
+}
 
 // 获取供应商配置
 function getProviderConfig(nodeType: ImageNodeType) {
@@ -37,11 +53,12 @@ function getProviderConfig(nodeType: ImageNodeType) {
 // 创建 API 客户端（仅用于 Web 环境）
 function createClient(nodeType: ImageNodeType) {
   const provider = getProviderConfig(nodeType);
+  const apiBaseUrl = getApiBaseUrl(provider.baseUrl, provider.protocol);
 
   return new GoogleGenAI({
     apiKey: provider.apiKey,
     httpOptions: {
-      baseUrl: provider.baseUrl,
+      baseUrl: apiBaseUrl,
     },
   });
 }
@@ -102,11 +119,12 @@ export async function generateImage(
   try {
     const provider = getProviderConfig(nodeType);
     const isPro = params.model === "gemini-3-pro-image-preview";
+    const apiBaseUrl = getApiBaseUrl(provider.baseUrl, provider.protocol);
 
     // 在 Tauri 环境中使用后端代理
     if (isTauri()) {
       return await invokeGemini({
-        baseUrl: provider.baseUrl || "https://generativelanguage.googleapis.com/v1beta",
+        baseUrl: apiBaseUrl,
         apiKey: provider.apiKey,
         model: params.model,
         prompt: params.prompt,
@@ -170,12 +188,13 @@ export async function editImage(
   try {
     const provider = getProviderConfig(nodeType);
     const isPro = params.model === "gemini-3-pro-image-preview";
+    const apiBaseUrl = getApiBaseUrl(provider.baseUrl, provider.protocol);
 
     // 在 Tauri 环境中使用后端代理
     if (isTauri()) {
       console.log("[imageService] Using Tauri backend proxy");
       return await invokeGemini({
-        baseUrl: provider.baseUrl || "https://generativelanguage.googleapis.com/v1beta",
+        baseUrl: apiBaseUrl,
         apiKey: provider.apiKey,
         model: params.model,
         prompt: params.prompt,

@@ -31,10 +31,8 @@ function getApiConfig() {
     throw new Error("供应商 API Key 未配置");
   }
 
-  // 处理 baseUrl：移除末尾斜杠和版本路径后缀（/v1beta, /v1 等）
-  let baseUrl = provider.baseUrl
-    .replace(/\/+$/, "")           // 移除末尾斜杠
-    .replace(/\/v1(beta)?$/, "");  // 移除 /v1 或 /v1beta 后缀
+  // 视频服务直接使用 baseUrl，移除末尾斜杠即可
+  const baseUrl = provider.baseUrl.replace(/\/+$/, "");
 
   return {
     apiKey: provider.apiKey,
