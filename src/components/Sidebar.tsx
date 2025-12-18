@@ -10,7 +10,6 @@ import {
   Edit3,
   Check,
   X,
-  ChevronDown,
   ChevronRight,
   GripVertical,
   BookText,
@@ -377,44 +376,53 @@ export function Sidebar({ onDragStart }: SidebarProps) {
                     className="flex items-center gap-2 w-full px-2 py-1.5 text-sm font-medium text-base-content/70 hover:text-base-content hover:bg-base-200 rounded-lg transition-colors"
                     onClick={() => toggleCategory(category.id)}
                   >
-                    {expandedCategories.has(category.id) ? (
-                      <ChevronDown className="w-4 h-4" />
-                    ) : (
-                      <ChevronRight className="w-4 h-4" />
-                    )}
+                    <ChevronRight
+                      className={`w-4 h-4 transition-transform duration-200 ${
+                        expandedCategories.has(category.id) ? "rotate-90" : ""
+                      }`}
+                    />
                     <span>{category.name}</span>
                     <span className="text-xs text-base-content/40 ml-auto">
                       {category.nodes.length}
                     </span>
                   </button>
 
-                  {expandedCategories.has(category.id) && (
-                    <div className="mt-1 space-y-1">
-                      {category.nodes.map((node) => {
-                        const IconComponent = nodeIconMap[node.icon];
-                        const iconColorClass = nodeIconColors[node.icon] || "";
-                        return (
-                          <div
-                            key={node.type}
-                            className="draggable-node flex items-center gap-2 px-2 py-2 bg-base-200/50 hover:bg-base-200 rounded-lg transition-colors group cursor-grab"
-                            draggable
-                            onDragStart={(e) => onDragStart(e, node.type, node.defaultData)}
-                          >
-                            <GripVertical className="w-3 h-3 text-base-content/30 group-hover:text-base-content/50 flex-shrink-0" />
-                            <div className={`p-1.5 rounded-lg flex-shrink-0 ${iconColorClass}`}>
-                              {IconComponent && <IconComponent className="w-4 h-4" />}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="text-sm font-medium truncate">{node.label}</div>
-                              <div className="text-xs text-base-content/50 truncate">
-                                {node.description}
+                  {/* 使用 grid 实现平滑展开/收起动画 */}
+                  <div
+                    className={`grid transition-[grid-template-rows] duration-200 ease-out ${
+                      expandedCategories.has(category.id)
+                        ? "grid-rows-[1fr]"
+                        : "grid-rows-[0fr]"
+                    }`}
+                  >
+                    <div className="overflow-hidden">
+                      <div className="mt-1 space-y-1">
+                        {category.nodes.map((node) => {
+                          const IconComponent = nodeIconMap[node.icon];
+                          const iconColorClass = nodeIconColors[node.icon] || "";
+                          return (
+                            <div
+                              key={node.type}
+                              className="draggable-node flex items-center gap-2 px-2 py-2 bg-base-200/50 hover:bg-base-200 rounded-lg transition-colors group cursor-grab"
+                              draggable
+                              onDragStart={(e) => onDragStart(e, node.type, node.defaultData)}
+                            >
+                              <GripVertical className="w-3 h-3 text-base-content/30 group-hover:text-base-content/50 flex-shrink-0" />
+                              <div className={`p-1.5 rounded-lg flex-shrink-0 ${iconColorClass}`}>
+                                {IconComponent && <IconComponent className="w-4 h-4" />}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium truncate">{node.label}</div>
+                                <div className="text-xs text-base-content/50 truncate">
+                                  {node.description}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        })}
+                      </div>
                     </div>
-                  )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -453,11 +461,11 @@ export function Sidebar({ onDragStart }: SidebarProps) {
                       className="flex items-center gap-2 w-full px-2 py-1.5 text-sm font-medium text-base-content/70 hover:text-base-content hover:bg-base-200 rounded-lg transition-colors"
                       onClick={() => togglePromptCategory(category.id)}
                     >
-                      {expandedPromptCategories.has(category.id) ? (
-                        <ChevronDown className="w-4 h-4" />
-                      ) : (
-                        <ChevronRight className="w-4 h-4" />
-                      )}
+                      <ChevronRight
+                        className={`w-4 h-4 transition-transform duration-200 ${
+                          expandedPromptCategories.has(category.id) ? "rotate-90" : ""
+                        }`}
+                      />
                       <div className={`p-1 rounded ${categoryColorClass}`}>
                         {CategoryIcon && <CategoryIcon className="w-3 h-3" />}
                       </div>
@@ -467,46 +475,55 @@ export function Sidebar({ onDragStart }: SidebarProps) {
                       </span>
                     </button>
 
-                    {expandedPromptCategories.has(category.id) && (
-                      <div className="mt-1 space-y-1">
-                        {category.prompts.map((prompt) => (
-                          <div
-                            key={prompt.id}
-                            className="draggable-prompt flex items-start gap-2 px-2 py-2 bg-base-200/50 hover:bg-base-200 rounded-lg transition-colors group cursor-grab"
-                            draggable
-                            onDragStart={(e) => {
-                              // 设置提示词模板数据
-                              e.dataTransfer.setData(
-                                "application/reactflow/prompt-template",
-                                JSON.stringify({
-                                  promptText: prompt.prompt,
-                                  template: prompt.nodeTemplate,
-                                })
-                              );
-                              e.dataTransfer.effectAllowed = "move";
-                            }}
-                          >
-                            <GripVertical className="w-3 h-3 mt-1 text-base-content/30 group-hover:text-base-content/50 flex-shrink-0" />
-                            <div className="flex-1 min-w-0">
-                              <div className="text-sm font-medium truncate">{prompt.title}</div>
-                              <div className="text-xs text-base-content/50 truncate">
-                                {prompt.description}
-                              </div>
-                            </div>
-                            <button
-                              className="btn btn-ghost btn-xs btn-circle flex-shrink-0"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openPromptPreview(prompt);
+                    {/* 使用 grid 实现平滑展开/收起动画 */}
+                    <div
+                      className={`grid transition-[grid-template-rows] duration-200 ease-out ${
+                        expandedPromptCategories.has(category.id)
+                          ? "grid-rows-[1fr]"
+                          : "grid-rows-[0fr]"
+                      }`}
+                    >
+                      <div className="overflow-hidden">
+                        <div className="mt-1 space-y-1">
+                          {category.prompts.map((prompt) => (
+                            <div
+                              key={prompt.id}
+                              className="draggable-prompt flex items-start gap-2 px-2 py-2 bg-base-200/50 hover:bg-base-200 rounded-lg transition-colors group cursor-grab"
+                              draggable
+                              onDragStart={(e) => {
+                                // 设置提示词模板数据
+                                e.dataTransfer.setData(
+                                  "application/reactflow/prompt-template",
+                                  JSON.stringify({
+                                    promptText: prompt.prompt,
+                                    template: prompt.nodeTemplate,
+                                  })
+                                );
+                                e.dataTransfer.effectAllowed = "move";
                               }}
-                              title="预览提示词"
                             >
-                              <Eye className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        ))}
+                              <GripVertical className="w-3 h-3 mt-1 text-base-content/30 group-hover:text-base-content/50 flex-shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium truncate">{prompt.title}</div>
+                                <div className="text-xs text-base-content/50 truncate">
+                                  {prompt.description}
+                                </div>
+                              </div>
+                              <button
+                                className="btn btn-ghost btn-xs btn-circle flex-shrink-0"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openPromptPreview(prompt);
+                                }}
+                                title="预览提示词"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    )}
+                    </div>
                   </div>
                 );
               })}
