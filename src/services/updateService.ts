@@ -45,7 +45,7 @@ export interface GitHubRelease {
  */
 export function getCurrentVersion(): string {
   // 使用 Vite 注入的版本号，如果不存在则使用默认值
-  return typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "0.1.2";
+  return typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "0.2.0";
 }
 
 /**

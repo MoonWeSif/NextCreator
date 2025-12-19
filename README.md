@@ -3,7 +3,7 @@
   <h1>NextCreator</h1>
   <p>基于可视化节点的 AI 内容生成工作流工具</p>
 
-  ![Version](https://img.shields.io/badge/version-0.1.2-blue.svg)
+  ![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)
   ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg)
   ![Tauri](https://img.shields.io/badge/Tauri-2.0-24C8DB.svg?logo=tauri&logoColor=white)
   ![React](https://img.shields.io/badge/React-19-61DAFB.svg?logo=react&logoColor=white)
@@ -16,10 +16,12 @@
 
 - **节点编辑器** - 拖拽式工作流设计，支持撤销/重做、复制粘贴、自动布局
 - **多画布管理** - 创建多个独立画布，数据自动持久化
-- **AI 图片生成** - 支持文生图、图生图，可配置分辨率和比例
+- **AI 图片生成** - 支持 NanoBanana 文生图、图生图，可配置分辨率和比例
 - **AI 视频生成** - 基于 Sora 模型的视频生成
 - **LLM 文本生成** - 支持多模态输入（文本/图片/PDF）
 - **PPT 工作流** - 自动生成大纲、PPT页面，导出可编辑文字的 PPTX
+- **Prompt 提示词库** - 内置大量绘图提示词，可拖拽至画布，快速使用，可添加自定义提示词。
+- **工作流编排** - 支持工作流批量并行启动
 
 ## 截图预览
 
@@ -40,6 +42,11 @@
 **可编辑模式** - 去除文字仅保留背景，方便后期编辑
 ![PPT 预览 - 可编辑模式](docs/images/ppt-preview.png)
 
+### Prompt 库
+
+**Pormpt 提示词库** - 内置几十种提示词，可以拖拽至画布，快速开始使用
+![Prompt 库](docs/images/prompt.png)
+
 ## 快速开始
 
 前往 [Releases](https://github.com/MoonWeSif/NextCreator/releases) 下载最新版本：
@@ -54,7 +61,6 @@
 
 ```bash
 xattr -rc "/Applications/NextCreator.app"
-codesign --force --deep --sign - "/Applications/NextCreator.app"
 ```
 
 ## 使用流程
@@ -115,7 +121,10 @@ docker-compose up -d
 | 状态 | Zustand + IndexedDB |
 | 节点 | @xyflow/react |
 
+## 致谢
+
+- [Nanobanana 提示词](https://github.com/ZeroLu/awesome-nanobanana-pro) - 本项目的内置提示词参照该仓库,感谢项目作者的整理与各个提示词的贡献者。
+
 ## 许可证
 
 本项目基于 [GNU Affero General Public License v3](https://www.gnu.org/licenses/agpl-3.0.html) 发行，详细条款请参阅仓库根目录的 `LICENSE` 文件。
-IT
