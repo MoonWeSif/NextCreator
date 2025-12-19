@@ -9,7 +9,7 @@ import {
   deleteImage,
   isTauriEnvironment,
   type StorageStats,
-  type ImageInfo,
+  type ImageInfoWithMetadata,
 } from "@/services/fileStorageService";
 
 // 展开的画布 ID 集合
@@ -25,7 +25,7 @@ interface StorageManagementState {
   fileStats: StorageStats | null;
   storagePath: string | null;
   expandedFileCanvases: string[]; // 展开的画布（文件存储）
-  canvasImages: Map<string, ImageInfo[]>; // 画布图片详情
+  canvasImages: Map<string, ImageInfoWithMetadata[]>; // 画布图片详情（包含元数据）
 
   // 错误信息
   error: string | null;

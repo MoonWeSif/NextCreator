@@ -4,12 +4,12 @@ import { Sparkles, Zap, Play, AlertCircle, Maximize2, AlertTriangle, CircleAlert
 import { useFlowStore } from "@/stores/flowStore";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { generateImage, editImage } from "@/services/imageService";
-import { saveImage, getImageUrl, isTauriEnvironment } from "@/services/fileStorageService";
+import { saveImage, getImageUrl, isTauriEnvironment, type InputImageInfo } from "@/services/fileStorageService";
 import { ImagePreviewModal } from "@/components/ui/ImagePreviewModal";
 import { ErrorDetailModal } from "@/components/ui/ErrorDetailModal";
 import { ModelSelector } from "@/components/ui/ModelSelector";
 import { useLoadingDots } from "@/hooks/useLoadingDots";
-import type { ImageGeneratorNodeData, ModelType } from "@/types";
+import type { ImageGeneratorNodeData, ImageInputNodeData, ModelType } from "@/types";
 
 // 定义节点类型
 type ImageGeneratorNode = Node<ImageGeneratorNodeData>;
@@ -60,7 +60,7 @@ function ImageGeneratorBase({
   selected,
   isPro,
 }: NodeProps<ImageGeneratorNode> & { isPro: boolean }) {
-  const { updateNodeData, getConnectedInputData, getEmptyConnectedInputs } = useFlowStore();
+  const { updateNodeData, getConnectedInputData, getEmptyConnectedInputs, getConnectedImagesWithInfo } = useFlowStore();
   const [showPreview, setShowPreview] = useState(false);
   const [showErrorDetail, setShowErrorDetail] = useState(false);
 
@@ -172,16 +172,57 @@ function ImageGeneratorBase({
         // 在 Tauri 环境中，将图片保存到文件系统
         if (isTauriEnvironment() && activeCanvasId) {
           try {
+            // 1. 先处理输入图片（如果有且未保存到文件系统）
+            const connectedImages = getConnectedImagesWithInfo(id);
+            const inputImagesMetadata: InputImageInfo[] = [];
+
+            for (const img of connectedImages) {
+              let imagePath = img.imagePath;
+
+              // 如果输入图片还没有保存到文件系统，现在保存
+              if (!imagePath && img.imageData) {
+                try {
+                  const inputImageInfo = await saveImage(
+                    img.imageData,
+                    activeCanvasId,
+                    img.id,  // 输入图片节点的 ID
+                    undefined,
+                    undefined,
+                    "input"
+                  );
+                  imagePath = inputImageInfo.path;
+
+                  // 更新输入图片节点的路径，避免下次重复保存
+                  updateNodeData<ImageInputNodeData>(img.id, {
+                    imagePath: inputImageInfo.path,
+                  });
+                } catch (err) {
+                  console.warn("保存输入图片失败:", err);
+                }
+              }
+
+              // 添加到元数据（有路径才添加）
+              if (imagePath) {
+                inputImagesMetadata.push({
+                  path: imagePath,
+                  label: img.fileName || "输入图片",
+                });
+              }
+            }
+
+            // 2. 保存生成的图片和元数据
             const imageInfo = await saveImage(
               response.imageData,
               activeCanvasId,
-              id
+              id,
+              prompt,
+              inputImagesMetadata.length > 0 ? inputImagesMetadata : undefined,
+              "generated"
             );
-            // 保存文件路径和 base64（base64 用于节点间数据传递）
-            // 注意：IndexedDB 持久化时可以选择只存储路径
+
             updateNodeDataWithCanvas(id, {
               status: "success",
-              outputImage: response.imageData, // 保留用于节点间传递
+              outputImage: response.imageData,
               outputImagePath: imageInfo.path,
               error: undefined,
             });
@@ -222,7 +263,7 @@ function ImageGeneratorBase({
         error: "生成失败",
       });
     }
-  }, [id, model, data.aspectRatio, data.imageSize, isPro, updateNodeDataWithCanvas, getConnectedInputData]);
+  }, [id, model, data.aspectRatio, data.imageSize, isPro, updateNodeDataWithCanvas, getConnectedInputData, getConnectedImagesWithInfo]);
 
   // 节点样式配置
   const headerGradient = isPro

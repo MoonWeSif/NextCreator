@@ -6,6 +6,24 @@
 import { invoke } from "@tauri-apps/api/core";
 import { convertFileSrc } from "@tauri-apps/api/core";
 
+// 图片类型枚举
+export type ImageType = "input" | "generated";
+
+// 输入图片信息（用于元数据）
+export interface InputImageInfo {
+  path?: string;
+  label: string;
+}
+
+// 图片元数据结构
+export interface ImageMetadata {
+  prompt?: string;
+  input_images: InputImageInfo[];
+  node_id?: string;
+  canvas_id?: string;
+  created_at: number;
+}
+
 // 图片信息类型
 export interface ImageInfo {
   id: string;
@@ -15,6 +33,12 @@ export interface ImageInfo {
   created_at: number;
   canvas_id?: string;
   node_id?: string;
+  image_type?: ImageType;
+}
+
+// 带元数据的图片信息
+export interface ImageInfoWithMetadata extends ImageInfo {
+  metadata?: ImageMetadata;
 }
 
 // 存储统计信息类型
@@ -36,17 +60,26 @@ export interface CanvasImageStats {
  * @param base64Data - 图片的 base64 数据（不含 data:image/xxx;base64, 前缀）
  * @param canvasId - 可选的画布 ID，用于分组存储
  * @param nodeId - 可选的节点 ID
+ * @param prompt - 可选的生成提示词
+ * @param inputImages - 可选的输入图片信息
+ * @param imageType - 可选的图片类型（input/generated）
  * @returns 图片信息
  */
 export async function saveImage(
   base64Data: string,
   canvasId?: string,
-  nodeId?: string
+  nodeId?: string,
+  prompt?: string,
+  inputImages?: InputImageInfo[],
+  imageType?: ImageType
 ): Promise<ImageInfo> {
   return await invoke<ImageInfo>("save_image", {
     base64Data,
     canvasId,
     nodeId,
+    prompt,
+    inputImages,
+    imageType,
   });
 }
 
@@ -119,12 +152,21 @@ export async function getStoragePath(): Promise<string> {
 }
 
 /**
- * 列出画布的所有图片
+ * 列出画布的所有图片（包含元数据）
  * @param canvasId - 画布 ID
- * @returns 图片信息列表
+ * @returns 图片信息列表（包含元数据）
  */
-export async function listCanvasImages(canvasId: string): Promise<ImageInfo[]> {
-  return await invoke<ImageInfo[]>("list_canvas_images", { canvasId });
+export async function listCanvasImages(canvasId: string): Promise<ImageInfoWithMetadata[]> {
+  return await invoke<ImageInfoWithMetadata[]>("list_canvas_images", { canvasId });
+}
+
+/**
+ * 读取单个图片的元数据
+ * @param imagePath - 图片文件路径
+ * @returns 图片元数据（如果存在）
+ */
+export async function readImageMetadata(imagePath: string): Promise<ImageMetadata | null> {
+  return await invoke<ImageMetadata | null>("read_image_metadata", { imagePath });
 }
 
 /**

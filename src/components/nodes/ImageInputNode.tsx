@@ -2,9 +2,8 @@ import { memo, useCallback, useRef, useState } from "react";
 import { Handle, Position, type NodeProps, type Node } from "@xyflow/react";
 import { ImagePlus, Upload, X, Maximize2 } from "lucide-react";
 import { useFlowStore } from "@/stores/flowStore";
-import { useCanvasStore } from "@/stores/canvasStore";
 import { ImagePreviewModal } from "@/components/ui/ImagePreviewModal";
-import { saveImage, getImageUrl, isTauriEnvironment } from "@/services/fileStorageService";
+import { getImageUrl } from "@/services/fileStorageService";
 import type { ImageInputNodeData } from "@/types";
 
 // 定义节点类型
@@ -24,30 +23,13 @@ export const ImageInputNode = memo(({ id, data, selected }: NodeProps<ImageInput
       const reader = new FileReader();
       reader.onload = async () => {
         const base64 = (reader.result as string).split(",")[1];
-        // 在 Tauri 環境下，同步保存到文件系統，減少後續持久化時的數據體積
-        if (isTauriEnvironment()) {
-          try {
-            const { activeCanvasId } = useCanvasStore.getState();
-            const imageInfo = await saveImage(base64, activeCanvasId ?? undefined, id);
-            updateNodeData<ImageInputNodeData>(id, {
-              imageData: base64,
-              fileName: file.name,
-              imagePath: imageInfo.path,
-            });
-          } catch {
-            // 文件保存失敗時退回到僅 base64 存儲，保證功能可用
-            updateNodeData<ImageInputNodeData>(id, {
-              imageData: base64,
-              fileName: file.name,
-              imagePath: undefined,
-            });
-          }
-        } else {
-          updateNodeData<ImageInputNodeData>(id, {
-            imageData: base64,
-            fileName: file.name,
-          });
-        }
+
+        // 延迟存储策略：只在内存中保留 base64，在生成时才保存到文件系统
+        updateNodeData<ImageInputNodeData>(id, {
+          imageData: base64,
+          fileName: file.name,
+          imagePath: undefined,  // 延迟保存，生成时才创建文件
+        });
       };
       reader.readAsDataURL(file);
     },

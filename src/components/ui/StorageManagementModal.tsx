@@ -13,8 +13,9 @@ import {
 } from "lucide-react";
 import { useStorageManagementStore } from "@/stores/storageManagementStore";
 import { useCanvasStore } from "@/stores/canvasStore";
-import { formatFileSize, getImageUrl } from "@/services/fileStorageService";
+import { formatFileSize, getImageUrl, type ImageInfoWithMetadata } from "@/services/fileStorageService";
 import { LoadingIndicator } from "@/components/ui/LoadingIndicator";
+import { ImageDetailModal } from "@/components/ui/ImageDetailModal";
 
 export function StorageManagementModal() {
   const {
@@ -33,6 +34,7 @@ export function StorageManagementModal() {
     handleClearCanvasImages,
     handleDeleteImage,
     toggleFileCanvasExpanded,
+    loadCanvasImages,
   } = useStorageManagementStore();
 
   const { canvases } = useCanvasStore();
@@ -49,6 +51,12 @@ export function StorageManagementModal() {
     canvasId?: string;
     canvasName?: string;
   } | null>(null);
+
+  // 图片详情预览状态
+  const [selectedImage, setSelectedImage] = useState<ImageInfoWithMetadata | null>(null);
+
+  // 搜索状态
+  const [searchQuery, setSearchQuery] = useState("");
 
   // 进入动画
   useEffect(() => {
@@ -78,6 +86,24 @@ export function StorageManagementModal() {
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, handleClose]);
+
+  // 当用户输入搜索关键词时，自动加载所有画布的图片数据
+  useEffect(() => {
+    if (!searchQuery.trim() || !fileStats || !isTauri) return;
+
+    // 加载所有未加载的画布图片
+    const loadAllCanvasImages = async () => {
+      const canvasIds = fileStats.images_by_canvas.map(c => c.canvas_id);
+      const unloadedCanvasIds = canvasIds.filter(id => !canvasImages.has(id));
+
+      // 并行加载所有未加载的画布图片
+      await Promise.all(
+        unloadedCanvasIds.map(canvasId => loadCanvasImages(canvasId))
+      );
+    };
+
+    loadAllCanvasImages();
+  }, [searchQuery, fileStats, isTauri, canvasImages, loadCanvasImages]);
 
   if (!isOpen) return null;
 
@@ -148,6 +174,25 @@ export function StorageManagementModal() {
 
     return (
       <div className="space-y-4">
+        {/* 搜索框 */}
+        <div className="relative">
+          <input
+            type="text"
+            placeholder="搜索提示词..."
+            className="input input-sm w-full bg-base-200 border-base-300 focus:border-primary focus:outline-none pr-8"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+          {searchQuery && (
+            <button
+              className="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full hover:bg-base-300 text-base-content/50 hover:text-base-content transition-colors"
+              onClick={() => setSearchQuery("")}
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+
         {/* 总览卡片 */}
         <div className="grid grid-cols-3 gap-3">
           <div className="bg-base-200 rounded-xl p-3">
@@ -189,7 +234,24 @@ export function StorageManagementModal() {
               {fileStats.images_by_canvas.map((canvasStats) => {
                 const canvasName = getCanvasName(canvasStats.canvas_id);
                 const isExpanded = expandedFileCanvases.includes(canvasStats.canvas_id);
-                const images = canvasImages.get(canvasStats.canvas_id) || [];
+                const allImages = canvasImages.get(canvasStats.canvas_id) || [];
+
+                // 根据搜索关键词过滤图片
+                const filteredImages = !searchQuery.trim()
+                  ? allImages
+                  : allImages.filter((image) => {
+                      const query = searchQuery.toLowerCase();
+                      // 搜索提示词
+                      const promptMatch = image.metadata?.prompt?.toLowerCase().includes(query);
+                      // 搜索文件名
+                      const filenameMatch = image.filename.toLowerCase().includes(query);
+                      return promptMatch || filenameMatch;
+                    });
+
+                // 如果有搜索关键词且没有匹配结果，不显示这个画布分组
+                if (searchQuery.trim() && filteredImages.length === 0) {
+                  return null;
+                }
 
                 return (
                   <div
@@ -210,7 +272,10 @@ export function StorageManagementModal() {
                         <div>
                           <p className="font-medium text-sm">{canvasName}</p>
                           <p className="text-xs text-base-content/60">
-                            {canvasStats.image_count} 张图片 · {formatFileSize(canvasStats.total_size)}
+                            {searchQuery.trim()
+                              ? `${filteredImages.length} / ${canvasStats.image_count} 张图片`
+                              : `${canvasStats.image_count} 张图片`
+                            } · {formatFileSize(canvasStats.total_size)}
                           </p>
                         </div>
                       </div>
@@ -229,31 +294,56 @@ export function StorageManagementModal() {
                     {/* 展开的图片列表 */}
                     {isExpanded && (
                       <div className="p-3 space-y-2 bg-base-100">
-                        {images.length === 0 ? (
+                        {allImages.length === 0 ? (
                           <div className="text-center py-4 text-base-content/50 text-sm">
                             <LoadingIndicator size="md" variant="dots" className="text-primary mx-auto mb-2" />
                             加载中...
                           </div>
+                        ) : filteredImages.length === 0 ? (
+                          <div className="text-center py-4 text-base-content/50 text-sm">
+                            <Image className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                            <p>没有匹配的图片</p>
+                          </div>
                         ) : (
-                          images.map((image) => (
+                          filteredImages.map((image) => (
                             <div
                               key={image.id}
-                              className="flex items-center gap-3 p-2 bg-base-200 rounded-lg"
+                              className="flex items-center gap-3 p-2 bg-base-200 rounded-lg cursor-pointer hover:bg-base-300 transition-colors"
+                              onClick={() => setSelectedImage(image)}
                             >
                               {/* 图片预览 */}
-                              <div className="w-12 h-12 rounded overflow-hidden flex-shrink-0 bg-base-300">
+                              <div className="w-12 h-12 rounded overflow-hidden flex-shrink-0 bg-base-300 relative">
                                 <img
                                   src={getImageUrl(image.path)}
                                   alt={image.filename}
                                   className="w-full h-full object-cover"
                                 />
+                                {/* 类型标签 */}
+                                {image.image_type && (
+                                  <div
+                                    className={`absolute bottom-0 right-0 px-1 text-[9px] leading-tight text-white ${
+                                      image.image_type === "input"
+                                        ? "bg-green-500"
+                                        : "bg-purple-500"
+                                    }`}
+                                    title={image.image_type === "input" ? "上传的图片" : "生成的图片"}
+                                  >
+                                    {image.image_type === "input" ? "输入" : "生成"}
+                                  </div>
+                                )}
                               </div>
                               {/* 图片信息 */}
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-medium truncate">{image.filename}</p>
                                 <p className="text-xs text-base-content/60">
                                   {formatFileSize(image.size)} ·{" "}
-                                  {new Date(image.created_at * 1000).toLocaleDateString()}
+                                  {new Date(image.created_at * 1000).toLocaleString('zh-CN', {
+                                    year: 'numeric',
+                                    month: '2-digit',
+                                    day: '2-digit',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })}
                                 </p>
                               </div>
                               {/* 删除按钮 */}
@@ -351,7 +441,7 @@ export function StorageManagementModal() {
     );
   };
 
-  return createPortal(
+  const modalContent = createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center">
       {/* 背景遮罩 */}
       <div
@@ -447,5 +537,18 @@ export function StorageManagementModal() {
       </div>
     </div>,
     document.body
+  );
+
+  return (
+    <>
+      {modalContent}
+      {/* 图片详情预览 */}
+      {selectedImage && (
+        <ImageDetailModal
+          imageInfo={selectedImage}
+          onClose={() => setSelectedImage(null)}
+        />
+      )}
+    </>
   );
 }

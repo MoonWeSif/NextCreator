@@ -105,11 +105,12 @@ interface FlowStore {
     files: Array<{ data: string; mimeType: string; fileName?: string }>;
   };
 
-  // 获取连接的图片详细信息（包含 ID、文件名）
+  // 获取连接的图片详细信息（包含 ID、文件名、路径）
   getConnectedImagesWithInfo: (nodeId: string) => Array<{
     id: string;
     fileName?: string;
     imageData: string;
+    imagePath?: string;
   }>;
 
   // 获取连接的文件详细信息（包含 ID、文件名、MIME类型）
@@ -450,15 +451,34 @@ export const useFlowStore = create<FlowStore>((set, get) => ({
     });
 
     // 创建新节点，带偏移
-    const newNodes: CustomNode[] = clipboard.nodes.map((node) => ({
-      ...node,
-      id: idMap.get(node.id)!,
-      position: {
-        x: node.position.x + offsetX,
-        y: node.position.y + offsetY,
-      },
-      selected: false,
-    }));
+    const newNodes: CustomNode[] = clipboard.nodes.map((node) => {
+      // 清除图片节点的文件路径，保留 base64 数据
+      // 这样在新画布中生成时会重新保存到正确的目录
+      let cleanedData = { ...node.data };
+
+      if (node.type === "imageInputNode") {
+        cleanedData = {
+          ...cleanedData,
+          imagePath: undefined,  // 清除旧路径，保留 imageData 和 fileName
+        };
+      } else if (node.type === "imageGeneratorProNode" || node.type === "imageGeneratorFastNode") {
+        cleanedData = {
+          ...cleanedData,
+          outputImagePath: undefined,  // 清除旧路径，保留 outputImage
+        };
+      }
+
+      return {
+        ...node,
+        id: idMap.get(node.id)!,
+        position: {
+          x: node.position.x + offsetX,
+          y: node.position.y + offsetY,
+        },
+        data: cleanedData,
+        selected: false,
+      };
+    });
 
     // 创建新边，更新引用
     const newEdges: CustomEdge[] = clipboard.edges.map((edge) => ({
@@ -487,15 +507,33 @@ export const useFlowStore = create<FlowStore>((set, get) => ({
       idMap.set(node.id, uuidv4());
     });
 
-    const newNodes: CustomNode[] = nodesToDuplicate.map((node) => ({
-      ...node,
-      id: idMap.get(node.id)!,
-      position: {
-        x: node.position.x + 50,
-        y: node.position.y + 50,
-      },
-      selected: false,
-    }));
+    const newNodes: CustomNode[] = nodesToDuplicate.map((node) => {
+      // 清除图片节点的文件路径，保留 base64 数据
+      let cleanedData = { ...node.data };
+
+      if (node.type === "imageInputNode") {
+        cleanedData = {
+          ...cleanedData,
+          imagePath: undefined,  // 清除旧路径，保留 imageData 和 fileName
+        };
+      } else if (node.type === "imageGeneratorProNode" || node.type === "imageGeneratorFastNode") {
+        cleanedData = {
+          ...cleanedData,
+          outputImagePath: undefined,  // 清除旧路径，保留 outputImage
+        };
+      }
+
+      return {
+        ...node,
+        id: idMap.get(node.id)!,
+        position: {
+          x: node.position.x + 50,
+          y: node.position.y + 50,
+        },
+        data: cleanedData,
+        selected: false,
+      };
+    });
 
     // 复制内部边
     const relatedEdges = edges.filter(
@@ -897,12 +935,12 @@ export const useFlowStore = create<FlowStore>((set, get) => ({
     return { prompt, images, files };
   },
 
-  // 获取连接的图片详细信息（包含 ID、文件名）
+  // 获取连接的图片详细信息（包含 ID、文件名、路径）
   getConnectedImagesWithInfo: (nodeId) => {
     const { nodes, edges } = get();
     const incomingEdges = edges.filter((edge) => edge.target === nodeId);
 
-    const images: Array<{ id: string; fileName?: string; imageData: string }> = [];
+    const images: Array<{ id: string; fileName?: string; imageData: string; imagePath?: string }> = [];
 
     for (const edge of incomingEdges) {
       const sourceNode = nodes.find((n) => n.id === edge.source);
@@ -913,21 +951,23 @@ export const useFlowStore = create<FlowStore>((set, get) => ({
       // 只处理图片输入端口
       if (targetHandle === "input-image" || !targetHandle) {
         if (sourceNode.type === "imageInputNode") {
-          const data = sourceNode.data as { imageData?: string; fileName?: string };
+          const data = sourceNode.data as { imageData?: string; fileName?: string; imagePath?: string };
           if (data.imageData) {
             images.push({
               id: sourceNode.id,
               fileName: data.fileName || `图片-${sourceNode.id.slice(0, 4)}`,
               imageData: data.imageData,
+              imagePath: data.imagePath,
             });
           }
         } else if (sourceNode.type === "imageGeneratorProNode" || sourceNode.type === "imageGeneratorFastNode") {
-          const data = sourceNode.data as { outputImage?: string; label?: string };
+          const data = sourceNode.data as { outputImage?: string; label?: string; outputImagePath?: string };
           if (data.outputImage) {
             images.push({
               id: sourceNode.id,
               fileName: data.label || `生成-${sourceNode.id.slice(0, 4)}`,
               imageData: data.outputImage,
+              imagePath: data.outputImagePath,
             });
           }
         }

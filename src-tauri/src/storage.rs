@@ -5,6 +5,14 @@ use std::path::PathBuf;
 use tauri::Manager;
 use uuid::Uuid;
 
+// 图片类型枚举
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "lowercase")]
+pub enum ImageType {
+    Input,      // 用户上传的输入图片
+    Generated,  // AI 生成的图片
+}
+
 // 图片信息结构
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ImageInfo {
@@ -15,6 +23,38 @@ pub struct ImageInfo {
     pub created_at: i64,
     pub canvas_id: Option<String>,
     pub node_id: Option<String>,
+    pub image_type: Option<ImageType>,  // 新增：图片类型
+}
+
+// 图片元数据结构（持久化存储）
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ImageMetadata {
+    pub prompt: Option<String>,
+    pub input_images: Vec<InputImageInfo>,
+    pub node_id: Option<String>,
+    pub canvas_id: Option<String>,
+    pub created_at: i64,
+}
+
+// 输入图片信息
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct InputImageInfo {
+    pub path: Option<String>,
+    pub label: String,
+}
+
+// 带元数据的图片信息（用于前端）
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ImageInfoWithMetadata {
+    pub id: String,
+    pub filename: String,
+    pub path: String,
+    pub size: u64,
+    pub created_at: i64,
+    pub canvas_id: Option<String>,
+    pub node_id: Option<String>,
+    pub image_type: Option<ImageType>,  // 新增：图片类型
+    pub metadata: Option<ImageMetadata>,
 }
 
 // 存储统计信息
@@ -60,13 +100,16 @@ fn get_cache_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     Ok(cache_dir)
 }
 
-// 保存图片（从 base64）
+// 保存图片（从 base64）- 同时保存元数据
 #[tauri::command]
 pub fn save_image(
     app: tauri::AppHandle,
     base64_data: String,
     canvas_id: Option<String>,
     node_id: Option<String>,
+    prompt: Option<String>,
+    input_images: Option<Vec<InputImageInfo>>,
+    image_type: Option<ImageType>,  // 新增：图片类型
 ) -> Result<ImageInfo, String> {
     let images_dir = get_images_dir(&app)?;
 
@@ -92,8 +135,27 @@ pub fn save_image(
     let filename = format!("{}_{}.png", id, timestamp);
     let file_path = target_dir.join(&filename);
 
-    // 写入文件
+    // 写入图片文件
     fs::write(&file_path, &image_data).map_err(|e| format!("写入文件失败: {}", e))?;
+
+    // 保存元数据文件（如果有提示词或输入图片）
+    if prompt.is_some() || input_images.is_some() {
+        let metadata = ImageMetadata {
+            prompt: prompt.clone(),
+            input_images: input_images.unwrap_or_default(),
+            node_id: node_id.clone(),
+            canvas_id: canvas_id.clone(),
+            created_at: timestamp,
+        };
+
+        let meta_filename = format!("{}_{}.meta.json", id, timestamp);
+        let meta_path = target_dir.join(&meta_filename);
+
+        let meta_json = serde_json::to_string_pretty(&metadata)
+            .map_err(|e| format!("序列化元数据失败: {}", e))?;
+
+        fs::write(&meta_path, meta_json).map_err(|e| format!("写入元数据失败: {}", e))?;
+    }
 
     let path_str = file_path
         .to_str()
@@ -108,6 +170,7 @@ pub fn save_image(
         created_at: timestamp,
         canvas_id,
         node_id,
+        image_type,  // 返回图片类型
     })
 }
 
@@ -184,8 +247,16 @@ pub fn get_storage_stats(app: tauri::AppHandle) -> Result<StorageStats, String> 
                         for file in files.flatten() {
                             if let Ok(metadata) = file.metadata() {
                                 if metadata.is_file() {
-                                    canvas_size += metadata.len();
-                                    canvas_count += 1;
+                                    // 只统计图片文件，排除元数据文件
+                                    let filename = file
+                                        .file_name()
+                                        .to_str()
+                                        .unwrap_or("")
+                                        .to_string();
+                                    if !filename.ends_with(".meta.json") {
+                                        canvas_size += metadata.len();
+                                        canvas_count += 1;
+                                    }
                                 }
                             }
                         }
@@ -262,16 +333,16 @@ pub fn get_storage_path(app: tauri::AppHandle) -> Result<String, String> {
         .ok_or("路径转换失败".to_string())
 }
 
-// 列出画布的所有图片
+// 列出画布的所有图片（带元数据）
 #[tauri::command]
 pub fn list_canvas_images(
     app: tauri::AppHandle,
     canvas_id: String,
-) -> Result<Vec<ImageInfo>, String> {
+) -> Result<Vec<ImageInfoWithMetadata>, String> {
     let images_dir = get_images_dir(&app)?;
     let canvas_dir = images_dir.join(&canvas_id);
 
-    let mut images: Vec<ImageInfo> = Vec::new();
+    let mut images: Vec<ImageInfoWithMetadata> = Vec::new();
 
     if !canvas_dir.exists() {
         return Ok(images);
@@ -281,47 +352,111 @@ pub fn list_canvas_images(
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_file() {
-                if let Ok(metadata) = entry.metadata() {
-                    let filename = path
-                        .file_name()
-                        .and_then(|n| n.to_str())
-                        .unwrap_or("unknown")
-                        .to_string();
+                let filename = path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("unknown")
+                    .to_string();
 
-                    // 从文件名解析 ID（格式: {id}_{timestamp}.png）
-                    let id = filename
-                        .split('_')
-                        .next()
-                        .unwrap_or(&filename)
-                        .to_string();
+                // 跳过元数据文件，只处理图片文件
+                if filename.ends_with(".meta.json") {
+                    continue;
+                }
 
-                    let created_at = metadata
-                        .created()
-                        .map(|t| {
-                            t.duration_since(std::time::UNIX_EPOCH)
-                                .map(|d| d.as_secs() as i64)
-                                .unwrap_or(0)
-                        })
-                        .unwrap_or(0);
+                if let Ok(file_metadata) = entry.metadata() {
+                    // 从文件名解析 ID 和时间戳（格式: {id}_{timestamp}.png）
+                    let parts: Vec<&str> = filename.split('_').collect();
+                    let id = parts.first().unwrap_or(&"unknown").to_string();
 
-                    images.push(ImageInfo {
+                    // 尝试从文件名获取时间戳，否则使用文件创建时间
+                    let created_at = if parts.len() >= 2 {
+                        parts[1]
+                            .trim_end_matches(".png")
+                            .parse::<i64>()
+                            .unwrap_or_else(|_| {
+                                file_metadata
+                                    .created()
+                                    .map(|t| {
+                                        t.duration_since(std::time::UNIX_EPOCH)
+                                            .map(|d| d.as_secs() as i64)
+                                            .unwrap_or(0)
+                                    })
+                                    .unwrap_or(0)
+                            })
+                    } else {
+                        file_metadata
+                            .created()
+                            .map(|t| {
+                                t.duration_since(std::time::UNIX_EPOCH)
+                                    .map(|d| d.as_secs() as i64)
+                                    .unwrap_or(0)
+                            })
+                            .unwrap_or(0)
+                    };
+
+                    // 尝试读取对应的元数据文件
+                    let meta_filename = filename.replace(".png", ".meta.json");
+                    let meta_path = canvas_dir.join(&meta_filename);
+                    let metadata = if meta_path.exists() {
+                        fs::read_to_string(&meta_path)
+                            .ok()
+                            .and_then(|content| serde_json::from_str::<ImageMetadata>(&content).ok())
+                    } else {
+                        None
+                    };
+
+                    // 从元数据中获取 node_id
+                    let node_id = metadata.as_ref().and_then(|m| m.node_id.clone());
+
+                    // 推断图片类型：有 prompt 说明是生成的，否则可能是输入的
+                    let image_type = if metadata.as_ref().and_then(|m| m.prompt.as_ref()).is_some() {
+                        Some(ImageType::Generated)
+                    } else if metadata.is_none() {
+                        // 旧数据没有元数据，可能是输入图片
+                        Some(ImageType::Input)
+                    } else {
+                        None
+                    };
+
+                    images.push(ImageInfoWithMetadata {
                         id,
                         filename,
                         path: path.to_str().unwrap_or("").to_string(),
-                        size: metadata.len(),
+                        size: file_metadata.len(),
                         created_at,
                         canvas_id: Some(canvas_id.clone()),
-                        node_id: None,
+                        node_id,
+                        image_type,
+                        metadata,
                     });
                 }
             }
         }
     }
 
-    // 按创建时间排序
+    // 按创建时间排序（最新的在前）
     images.sort_by(|a, b| b.created_at.cmp(&a.created_at));
 
     Ok(images)
+}
+
+// 读取单个图片的元数据
+#[tauri::command]
+pub fn read_image_metadata(image_path: String) -> Result<Option<ImageMetadata>, String> {
+    // 从图片路径构造元数据文件路径
+    let meta_path = image_path.replace(".png", ".meta.json");
+
+    if !std::path::Path::new(&meta_path).exists() {
+        return Ok(None);
+    }
+
+    let content = fs::read_to_string(&meta_path)
+        .map_err(|e| format!("读取元数据失败: {}", e))?;
+
+    let metadata: ImageMetadata = serde_json::from_str(&content)
+        .map_err(|e| format!("解析元数据失败: {}", e))?;
+
+    Ok(Some(metadata))
 }
 
 // 辅助函数：计算目录大小

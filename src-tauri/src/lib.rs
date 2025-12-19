@@ -20,6 +20,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             save_image,
             read_image,
+            read_image_metadata,
             delete_image,
             delete_canvas_images,
             get_storage_stats,
