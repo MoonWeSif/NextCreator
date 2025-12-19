@@ -14,6 +14,7 @@ import {
   RectangleHorizontal,
 } from "lucide-react";
 import type { PromptItem } from "@/config/promptConfig";
+import { ImagePreviewModal } from "@/components/ui/ImagePreviewModal";
 
 interface PromptPreviewModalProps {
   prompt: PromptItem | null;
@@ -24,17 +25,28 @@ interface PromptPreviewModalProps {
 export function PromptPreviewModal({ prompt, isOpen, onClose }: PromptPreviewModalProps) {
   const [isVisible, setIsVisible] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
+  const [isAnimatingIn, setIsAnimatingIn] = useState(true);
   const [copied, setCopied] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
+  const [isImagePreviewOpen, setIsImagePreviewOpen] = useState(false);
 
   // 处理打开/关闭动画
   useEffect(() => {
     if (isOpen) {
       setIsVisible(true);
       setIsClosing(false);
+      setIsAnimatingIn(true);
       setImageLoaded(false);
       setImageError(false);
+      setIsImagePreviewOpen(false); // 重置图片预览状态
+
+      // 触发入场动画
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setIsAnimatingIn(false);
+        });
+      });
     }
   }, [isOpen]);
 
@@ -77,23 +89,29 @@ export function PromptPreviewModal({ prompt, isOpen, onClose }: PromptPreviewMod
 
   return createPortal(
     <div
-      className={`
-        fixed inset-0 z-[9999] flex items-center justify-center p-4
-        transition-all duration-200
-        ${isClosing ? "opacity-0" : "opacity-100"}
-      `}
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
       onClick={handleClose}
     >
-      {/* 背景遮罩 */}
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+      {/* 背景遮罩 - 与整体动画同步 */}
+      <div
+        className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-200 ${
+          isAnimatingIn || isClosing ? "opacity-0" : "opacity-100"
+        }`}
+      />
 
       {/* Modal 内容 */}
       <div
         className={`
           relative w-full max-w-2xl max-h-[90vh] bg-base-100 rounded-2xl shadow-2xl
           overflow-hidden flex flex-col
-          transition-all duration-200
-          ${isClosing ? "scale-95 opacity-0" : "scale-100 opacity-100"}
+          transition-all duration-200 ease-out
+          ${
+            isAnimatingIn
+              ? "scale-95 opacity-0 translate-y-4"
+              : isClosing
+                ? "scale-95 opacity-0"
+                : "scale-100 opacity-100 translate-y-0"
+          }
         `}
         onClick={(e) => e.stopPropagation()}
       >
@@ -194,11 +212,13 @@ export function PromptPreviewModal({ prompt, isOpen, onClose }: PromptPreviewMod
                   <img
                     src={prompt.previewImage}
                     alt={prompt.title}
-                    className={`w-full h-auto max-h-80 object-contain transition-opacity duration-300 ${
+                    className={`w-full h-auto max-h-80 object-contain transition-opacity duration-300 cursor-pointer hover:opacity-90 ${
                       imageLoaded ? "opacity-100" : "opacity-0"
                     }`}
                     onLoad={() => setImageLoaded(true)}
                     onError={() => setImageError(true)}
+                    onClick={() => setIsImagePreviewOpen(true)}
+                    title="点击查看大图"
                   />
                 )}
               </div>
@@ -270,6 +290,26 @@ export function PromptPreviewModal({ prompt, isOpen, onClose }: PromptPreviewMod
           </div>
         </div>
       </div>
+
+      {/* 图片预览 Modal */}
+      {isImagePreviewOpen && prompt.previewImage && (
+        <ImagePreviewModal
+          imageData={
+            prompt.previewImage.startsWith("data:image")
+              ? prompt.previewImage.replace(/^data:image\/\w+;base64,/, "")
+              : undefined
+          }
+          imagePath={
+            prompt.previewImage.startsWith("http://") || prompt.previewImage.startsWith("https://")
+              ? prompt.previewImage
+              : !prompt.previewImage.startsWith("data:")
+                ? prompt.previewImage
+                : undefined
+          }
+          onClose={() => setIsImagePreviewOpen(false)}
+          fileName={`${prompt.title}.png`}
+        />
+      )}
     </div>,
     document.body
   );

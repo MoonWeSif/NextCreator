@@ -24,7 +24,9 @@ export function ImagePreviewModal({ imageData, imagePath, onClose, fileName }: I
 
   // 获取图片 URL
   const imageUrl = imagePath
-    ? getImageUrl(imagePath)
+    ? (imagePath.startsWith("http://") || imagePath.startsWith("https://"))
+      ? imagePath  // 外部 URL 直接使用
+      : getImageUrl(imagePath)  // 本地路径使用 getImageUrl
     : imageData
     ? `data:image/png;base64,${imageData}`
     : "";
@@ -35,6 +37,12 @@ export function ImagePreviewModal({ imageData, imagePath, onClose, fileName }: I
     setIsVisible(false);
     setTimeout(onClose, 200);
   }, [onClose]);
+
+  // 处理背景点击，阻止事件冒泡
+  const handleBackgroundClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation(); // 阻止事件冒泡到父级 Modal
+    handleClose();
+  }, [handleClose]);
 
   const handleDownload = useCallback(async () => {
     if (isDownloading) return;
@@ -118,7 +126,7 @@ export function ImagePreviewModal({ imageData, imagePath, onClose, fileName }: I
         transition-all duration-200 ease-out
         ${isVisible && !isClosing ? "bg-black/80" : "bg-black/0"}
       `}
-      onClick={handleClose}
+      onClick={handleBackgroundClick}
     >
       {/* 工具栏 */}
       <div
