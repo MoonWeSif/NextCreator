@@ -8,9 +8,10 @@ use std::time::Duration;
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FileData {
-    pub data: String,           // base64 编码的文件数据
-    pub mime_type: String,      // 文件MIME类型
-    pub file_name: Option<String>, // 文件名（可选）
+    pub data: String,      // base64 编码的文件数据
+    pub mime_type: String, // 文件MIME类型
+    #[allow(dead_code)]
+    pub file_name: Option<String>, // 文件名（可选，保留用于扩展）
 }
 
 // LLM 请求参数（前端传入）
