@@ -1,0 +1,56 @@
+import type { PromptCategory } from "../promptConfig";
+
+// 电商摄影类提示词
+export const ecommerceCategory: PromptCategory = {
+  id: "ecommerce",
+  name: "电商摄影",
+  nameEn: "E-commerce & Virtual Studio",
+  icon: "ShoppingBag",
+  description: "虚拟模特试穿、产品摄影和商业展示",
+  prompts: [
+    {
+      id: "virtual-tryon",
+      title: "虚拟模特试穿",
+      titleEn: "Virtual Model Try-On",
+      description: "让模特穿上特定服装,保留面料纹理和光线融合",
+      prompt: `Using Image 1 (the garment) and Image 2 (the model), create a hyper-realistic full-body fashion photo where the model is wearing the garment. Crucial Fit Details: The [T-shirt/Jacket] must drape naturally on the model's body, conforming to their posture and creating realistic folds and wrinkles. High-Fidelity Preservation: Preserve the original fabric texture, color, and any logos from Image 1 with extreme accuracy. Seamless Integration: Blend the garment into Image 2 by perfectly matching the ambient lighting, color temperature, and shadow direction. Photography Style: Clean e-commerce lookbook, shot on a Canon EOS R5 with a 50mm f/1.8 lens for a natural, professional look.`,
+      tags: ["试穿", "电商", "服装", "模特"],
+      source: "WeChat Article",
+      previewImage: "https://github.com/user-attachments/assets/81eaafb6-901b-424d-a197-dc1bc0bfc5bf",
+      nodeTemplate: { requiresImageInput: true, generatorType: "pro", aspectRatio: "3:4" },
+    },
+    {
+      id: "product-photography",
+      title: "专业产品摄影",
+      titleEn: "Professional Product Photography",
+      description: "将产品从杂乱背景中隔离,放置在高端商业摄影棚设置中",
+      prompt: `Identify the main product in the uploaded photo (automatically removing any hands holding it or messy background details). Recreate it as a premium e-commerce product shot. Subject Isolation: Cleanly extract the product, completely removing any fingers, hands, or clutter. Background: Place the product on a pure white studio background (RGB 255, 255, 255) with a subtle, natural contact shadow at the base to ground it. Lighting: Use soft, commercial studio lighting to highlight the product's texture and material. Ensure even illumination with no harsh glare. Retouching: Automatically fix any lens distortion, improve sharpness, and color-correct to make the product look brand new and professional.`,
+      tags: ["产品摄影", "电商", "白底", "商业"],
+      source: "WeChat Article",
+      previewImage: "https://github.com/user-attachments/assets/cdfd4934-d06a-48ee-bf28-58ce16c458c1",
+      nodeTemplate: { requiresImageInput: true, generatorType: "pro", aspectRatio: "1:1" },
+    },
+    {
+      id: "chibi-brand-store",
+      title: "Q版品牌小店",
+      titleEn: "3D Chibi-Style Miniature Brand Store",
+      description: "为品牌创建迷你3D小店",
+      prompt: `3D chibi-style miniature concept store of {Brand Name}, creatively designed with an exterior inspired by the brand's most iconic product or packaging (such as a giant {brand's core product, e.g., chicken bucket/hamburger/donut/roast duck}). The store features two floors with large glass windows clearly showcasing the cozy and finely decorated interior: {brand's primary color}-themed decor, warm lighting, and busy staff dressed in outfits matching the brand. Adorable tiny figures stroll or sit along the street, surrounded by benches, street lamps, and potted plants, creating a charming urban scene. Rendered in a miniature cityscape style using Cinema 4D, with a blind-box toy aesthetic, rich in details and realism, and bathed in soft lighting that evokes a relaxing afternoon atmosphere. --ar 2:3`,
+      tags: ["3D", "品牌", "Q版", "盲盒风格"],
+      source: "@dotey",
+      previewImage: "https://pbs.twimg.com/media/G7BWvI8X0AApeZB?format=jpg&name=900x900",
+      nodeTemplate: { requiresImageInput: false, generatorType: "pro", aspectRatio: "2:3" },
+    },
+    {
+      id: "room-furnishing",
+      title: "房间家具可视化",
+      titleEn: "Room Furnishing Visualization",
+      description: "可视化空房间配置家具后的效果",
+      prompt: `Show me how this room would look with furniture in it`,
+      tags: ["室内设计", "家具", "可视化", "房间"],
+      source: "@NanoBanana",
+      previewImage: "https://pbs.twimg.com/media/G63UHDYWoAAD_Hm?format=jpg&name=medium",
+      nodeTemplate: { requiresImageInput: true, generatorType: "pro", aspectRatio: "16:9" },
+    },
+  ],
+};
