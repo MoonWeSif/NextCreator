@@ -234,7 +234,7 @@ export function validateConnection(
   }
 
   // 8. 检查单输入限制
-  // - prompt 输入: 只允许一个连接
+  // - prompt 输入: 允许多个连接（会自动拼接）
   // - image 输入: ImageGenerator 和 PPTContent 允许多个，VideoGenerator 只允许一个
   const isMultiImageAllowed =
     targetNode.type === "imageGeneratorProNode" ||
@@ -243,6 +243,14 @@ export function validateConnection(
 
   const isImageInput = targetHandle === "input-image" ||
     (!targetHandle && sourceOutputType === "image");
+
+  const isPromptInput = targetHandle === "input-prompt" ||
+    (!targetHandle && sourceOutputType === "prompt");
+
+  // 如果是 prompt 输入，允许多个连接（会自动拼接文本）
+  if (isPromptInput) {
+    return { isValid: true };
+  }
 
   // 如果是允许多图的节点的 image 输入，直接允许连接
   if (isMultiImageAllowed && isImageInput) {

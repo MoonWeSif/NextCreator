@@ -339,24 +339,43 @@ export const PPTContentNode = memo(({ id, data, selected }: NodeProps<PPTContent
           id="input-prompt"
           style={{ top: "15%" }}
           className="!w-3 !h-3 !bg-blue-500 !border-2 !border-white"
-          title="主题描述"
         />
+        {/* prompt 端口标签 */}
+        <div
+          className="absolute -left-6 text-[10px] text-base-content/50 tooltip tooltip-left"
+          style={{ top: "15%", transform: "translateY(-100%)" }}
+          data-tip="支持多个输入，将自动拼接"
+        >
+          主题
+        </div>
         <Handle
           type="target"
           position={Position.Left}
           id="input-image"
           style={{ top: "40%" }}
           className="!w-3 !h-3 !bg-green-500 !border-2 !border-white"
-          title="模板基底图"
         />
+        {/* image 端口标签 */}
+        <div
+          className="absolute -left-9 text-[10px] text-base-content/50"
+          style={{ top: "40%", transform: "translateY(-100%)" }}
+        >
+          模板图
+        </div>
         <Handle
           type="target"
           position={Position.Left}
           id="input-file"
           style={{ top: "65%" }}
           className="!w-3 !h-3 !bg-orange-500 !border-2 !border-white"
-          title="参考文件"
         />
+        {/* file 端口标签 */}
+        <div
+          className="absolute -left-12 text-[10px] text-base-content/50"
+          style={{ top: "65%", transform: "translateY(-100%)" }}
+        >
+          参考文件
+        </div>
 
         {/* 节点头部 */}
         <div className="flex items-center justify-between px-3 py-2 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-t-lg">

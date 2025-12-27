@@ -289,6 +289,14 @@ function ImageGeneratorBase({
           style={{ top: "30%" }}
           className={`!w-3 !h-3 !bg-blue-500 !border-2 !border-white`}
         />
+        {/* prompt 端口标签 */}
+        <div
+          className="absolute -left-9 text-[10px] text-base-content/50 tooltip tooltip-left"
+          style={{ top: "30%", transform: "translateY(-100%)" }}
+          data-tip="支持多个输入，将自动拼接"
+        >
+          提示词
+        </div>
         {/* 输入端口 - image 类型（下方） */}
         <Handle
           type="target"
@@ -297,6 +305,13 @@ function ImageGeneratorBase({
           style={{ top: "70%" }}
           className={`!w-3 !h-3 !bg-green-500 !border-2 !border-white`}
         />
+        {/* image 端口标签 */}
+        <div
+          className="absolute -left-9 text-[10px] text-base-content/50"
+          style={{ top: "70%", transform: "translateY(-100%)" }}
+        >
+          参考图
+        </div>
 
         {/* 节点头部 */}
         <div className={`flex items-center justify-between px-3 py-2 ${headerGradient} rounded-t-lg`}>

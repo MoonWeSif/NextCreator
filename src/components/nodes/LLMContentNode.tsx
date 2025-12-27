@@ -213,6 +213,14 @@ export const LLMContentNode = memo(({ id, data, selected }: NodeProps<LLMContent
         className="!w-3 !h-3 !bg-blue-500 !border-2 !border-white"
         style={{ top: "25%" }}
       />
+      {/* prompt 端口标签 */}
+      <div
+        className="absolute -left-9 text-[10px] text-base-content/50 tooltip tooltip-left"
+        style={{ top: "25%", transform: "translateY(-100%)" }}
+        data-tip="支持多个输入，将自动拼接"
+      >
+        提示词
+      </div>
 
       {/* 输入端口 - image 类型 */}
       <Handle
@@ -222,6 +230,13 @@ export const LLMContentNode = memo(({ id, data, selected }: NodeProps<LLMContent
         className="!w-3 !h-3 !bg-green-500 !border-2 !border-white"
         style={{ top: "50%" }}
       />
+      {/* image 端口标签 */}
+      <div
+        className="absolute -left-6 text-[10px] text-base-content/50"
+        style={{ top: "50%", transform: "translateY(-100%)" }}
+      >
+        图片
+      </div>
 
       {/* 输入端口 - file 类型 */}
       <Handle
@@ -231,6 +246,13 @@ export const LLMContentNode = memo(({ id, data, selected }: NodeProps<LLMContent
         className="!w-3 !h-3 !bg-orange-500 !border-2 !border-white"
         style={{ top: "75%" }}
       />
+      {/* file 端口标签 */}
+      <div
+        className="absolute -left-6 text-[10px] text-base-content/50"
+        style={{ top: "75%", transform: "translateY(-100%)" }}
+      >
+        文件
+      </div>
 
       {/* 节点头部 */}
       <div className="flex items-center justify-between px-3 py-2 bg-gradient-to-r from-teal-500 to-cyan-500 rounded-t-lg">
