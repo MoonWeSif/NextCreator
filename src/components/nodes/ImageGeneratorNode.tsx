@@ -3,7 +3,7 @@ import { Handle, Position, type NodeProps, type Node } from "@xyflow/react";
 import { Sparkles, Zap, Play, AlertCircle, Maximize2, AlertTriangle, CircleAlert } from "lucide-react";
 import { useFlowStore } from "@/stores/flowStore";
 import { useCanvasStore } from "@/stores/canvasStore";
-import { generateImage, editImage } from "@/services/imageService";
+import { generateImage, editImage } from "@/services/imageGeneration";
 import { saveImage, getImageUrl, isTauriEnvironment, type InputImageInfo } from "@/services/fileStorageService";
 import { ImagePreviewModal } from "@/components/ui/ImagePreviewModal";
 import { ErrorDetailModal } from "@/components/ui/ErrorDetailModal";

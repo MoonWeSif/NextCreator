@@ -11,8 +11,12 @@ import { ToastContainer } from "@/components/ui/Toast";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useFlowStore } from "@/stores/flowStore";
 import { useSettingsStore } from "@/stores/settingsStore";
+import { initializeImageGenerationProviders } from "@/services/imageGeneration";
 
 import "@/index.css";
+
+// 初始化图片生成提供商
+initializeImageGenerationProviders();
 
 function App() {
   const { activeCanvasId, getActiveCanvas, createCanvas, updateCanvasData, canvases, _hasHydrated } = useCanvasStore();
