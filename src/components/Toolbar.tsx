@@ -5,7 +5,6 @@ import { useSettingsStore } from "@/stores/settingsStore";
 import { useFlowStore } from "@/stores/flowStore";
 import { useStorageManagementStore } from "@/stores/storageManagementStore";
 import { useModal, getModalAnimationClasses } from "@/hooks/useModal";
-import { isTauriEnvironment } from "@/services/fileStorageService";
 import { toast } from "@/stores/toastStore";
 import { WorkflowControls } from "@/components/workflow/WorkflowControls";
 import logoImage from "@/assets/logo.png";
@@ -74,99 +73,55 @@ export function Toolbar({ onOpenHelp }: { onOpenHelp?: () => void }) {
   // 导出工作流
   const handleExport = async () => {
     const { nodes, edges } = useFlowStore.getState();
-    // 清理 base64 数据，仅保留文件路径（同设备可恢复）
     const cleanedNodes = cleanNodeDataForExport(nodes);
     const data = { nodes: cleanedNodes, edges };
     const jsonStr = JSON.stringify(data, null, 2);
     const fileName = `next-workflow-${Date.now()}.json`;
 
-    if (isTauriEnvironment()) {
-      try {
-        const { save } = await import("@tauri-apps/plugin-dialog");
-        const { writeTextFile } = await import("@tauri-apps/plugin-fs");
+    try {
+      const { save } = await import("@tauri-apps/plugin-dialog");
+      const { writeTextFile } = await import("@tauri-apps/plugin-fs");
 
-        const filePath = await save({
-          defaultPath: fileName,
-          filters: [{ name: "JSON", extensions: ["json"] }],
-        });
+      const filePath = await save({
+        defaultPath: fileName,
+        filters: [{ name: "JSON", extensions: ["json"] }],
+      });
 
-        if (filePath) {
-          await writeTextFile(filePath, jsonStr);
-          toast.success(`工作流已保存到: ${filePath.split("/").pop()}`);
-        }
-      } catch (error) {
-        console.error("导出工作流失败:", error);
-        toast.error(`导出失败: ${error instanceof Error ? error.message : "未知错误"}`);
+      if (filePath) {
+        await writeTextFile(filePath, jsonStr);
+        toast.success(`工作流已保存到: ${filePath.split("/").pop()}`);
       }
-    } else {
-      // 浏览器环境
-      const blob = new Blob([jsonStr], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-      toast.success("工作流下载已开始");
+    } catch (error) {
+      console.error("导出工作流失败:", error);
+      toast.error(`导出失败: ${error instanceof Error ? error.message : "未知错误"}`);
     }
   };
 
   // 导入工作流
   const handleImport = async () => {
-    if (isTauriEnvironment()) {
-      try {
-        const { open } = await import("@tauri-apps/plugin-dialog");
-        const { readTextFile } = await import("@tauri-apps/plugin-fs");
+    try {
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const { readTextFile } = await import("@tauri-apps/plugin-fs");
 
-        const filePath = await open({
-          filters: [{ name: "JSON", extensions: ["json"] }],
-          multiple: false,
-        });
+      const filePath = await open({
+        filters: [{ name: "JSON", extensions: ["json"] }],
+        multiple: false,
+      });
 
-        if (filePath && typeof filePath === "string") {
-          const content = await readTextFile(filePath);
-          const data = JSON.parse(content);
-          if (data.nodes && data.edges) {
-            setNodes(data.nodes);
-            setEdges(data.edges);
-            toast.success("工作流导入成功");
-          } else {
-            toast.error("无效的工作流文件");
-          }
+      if (filePath && typeof filePath === "string") {
+        const content = await readTextFile(filePath);
+        const data = JSON.parse(content);
+        if (data.nodes && data.edges) {
+          setNodes(data.nodes);
+          setEdges(data.edges);
+          toast.success("工作流导入成功");
+        } else {
+          toast.error("无效的工作流文件");
         }
-      } catch (error) {
-        console.error("导入工作流失败:", error);
-        toast.error(`导入失败: ${error instanceof Error ? error.message : "未知错误"}`);
       }
-    } else {
-      // 浏览器环境
-      const input = document.createElement("input");
-      input.type = "file";
-      input.accept = ".json";
-      input.onchange = (e) => {
-        const file = (e.target as HTMLInputElement).files?.[0];
-        if (!file) return;
-
-        const reader = new FileReader();
-        reader.onload = () => {
-          try {
-            const data = JSON.parse(reader.result as string);
-            if (data.nodes && data.edges) {
-              setNodes(data.nodes);
-              setEdges(data.edges);
-              toast.success("工作流导入成功");
-            } else {
-              toast.error("无效的工作流文件");
-            }
-          } catch {
-            toast.error("无效的工作流文件");
-          }
-        };
-        reader.readAsText(file);
-      };
-      input.click();
+    } catch (error) {
+      console.error("导入工作流失败:", error);
+      toast.error(`导入失败: ${error instanceof Error ? error.message : "未知错误"}`);
     }
   };
 

@@ -4,7 +4,7 @@ import { Palette, Play, AlertCircle, Maximize2, AlertTriangle, CircleAlert } fro
 import { useFlowStore } from "@/stores/flowStore";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { generateImage } from "@/services/imageGeneration";
-import { saveImage, getImageUrl, isTauriEnvironment, type InputImageInfo } from "@/services/fileStorageService";
+import { saveImage, getImageUrl, type InputImageInfo } from "@/services/fileStorageService";
 import { ImagePreviewModal } from "@/components/ui/ImagePreviewModal";
 import { ErrorDetailModal } from "@/components/ui/ErrorDetailModal";
 import { ModelSelector } from "@/components/ui/ModelSelector";
@@ -131,7 +131,7 @@ function DalleGeneratorBase({
       }, "dalleGenerator");
 
       if (response.imageData) {
-        if (isTauriEnvironment() && activeCanvasId) {
+        if (activeCanvasId) {
           try {
             const connectedImages = getConnectedImagesWithInfo(id);
             const inputImagesMetadata: InputImageInfo[] = [];

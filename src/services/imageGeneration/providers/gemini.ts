@@ -55,13 +55,6 @@ export class GeminiImageProvider implements ImageGenerationProvider {
   readonly maxInputImages = 10;
 
   /**
-   * 检测是否在 Tauri 环境
-   */
-  private isTauri(): boolean {
-    return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-  }
-
-  /**
    * 验证请求参数
    */
   validateRequest(request: ImageGenerationRequest): {
@@ -136,13 +129,8 @@ export class GeminiImageProvider implements ImageGenerationProvider {
     }
 
     try {
-      if (this.isTauri()) {
-        return await this.generateViaTauri(request, config);
-      } else {
-        return await this.generateViaSDK(request, config, abortSignal);
-      }
+      return await this.generateViaTauri(request, config);
     } catch (error) {
-      // 检查是否是中断错误
       if (error instanceof Error && error.name === "AbortError") {
         return { error: "已取消" };
       }
@@ -192,76 +180,6 @@ export class GeminiImageProvider implements ImageGenerationProvider {
       metadata: {
         model: request.model,
       },
-    };
-  }
-
-  /**
-   * 通过 Web SDK 生成（浏览器环境）
-   */
-  private async generateViaSDK(
-    request: ImageGenerationRequest,
-    config: ProviderConfig,
-    abortSignal?: AbortSignal
-  ): Promise<ImageGenerationResponse> {
-    const { GoogleGenAI } = await import("@google/genai");
-
-    const apiBaseUrl = `${config.baseUrl.replace(/\/+$/, "")}/v1beta`;
-    const client = new GoogleGenAI({
-      apiKey: config.apiKey,
-      httpOptions: { baseUrl: apiBaseUrl },
-    });
-
-    // 构建请求内容
-    const parts: Array<
-      { text: string } | { inlineData: { mimeType: string; data: string } }
-    > = [{ text: request.prompt }];
-
-    // 添加输入图片
-    if (request.inputImages?.length) {
-      for (const imageData of request.inputImages) {
-        parts.push({
-          inlineData: {
-            mimeType: "image/png",
-            data: imageData,
-          },
-        });
-      }
-    }
-
-    const response = await client.models.generateContent({
-      model: request.model,
-      contents: [{ parts }],
-      config: {
-        responseModalities: ["IMAGE"],
-        imageConfig: {
-          aspectRatio: request.aspectRatio || "1:1",
-          ...(request.imageSize ? { imageSize: request.imageSize } : {}),
-        },
-        abortSignal,
-      },
-    });
-
-    // 解析响应
-    const candidate = response.candidates?.[0];
-    if (!candidate?.content?.parts) {
-      return { error: "无有效响应" };
-    }
-
-    let imageData: string | undefined;
-    let text: string | undefined;
-
-    for (const part of candidate.content.parts) {
-      if (part.inlineData) {
-        imageData = part.inlineData.data;
-      } else if (part.text) {
-        text = part.text;
-      }
-    }
-
-    return {
-      imageData,
-      text,
-      metadata: { model: request.model },
     };
   }
 

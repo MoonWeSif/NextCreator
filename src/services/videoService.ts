@@ -1,7 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { VideoGenerationParams, VideoGenerationResponse, ErrorDetails } from "@/types";
 import { useSettingsStore } from "@/stores/settingsStore";
-import { isTauriEnvironment } from "@/services/fileStorageService";
 import { toast } from "@/stores/toastStore";
 
 // 任务阶段类型
@@ -132,11 +131,6 @@ export async function createVideoTask(
       return { error: "已取消" };
     }
 
-    // 检查是否在 Tauri 环境
-    if (!isTauriEnvironment()) {
-      return { error: "此功能仅在桌面应用中可用" };
-    }
-
     const config = getApiConfig();
     const { apiKey, baseUrl, name: providerName } = config;
 
@@ -221,11 +215,6 @@ export async function createVideoTask(
 // 获取视频任务状态
 export async function getVideoTaskStatus(taskId: string): Promise<VideoGenerationResponse> {
   try {
-    // 检查是否在 Tauri 环境
-    if (!isTauriEnvironment()) {
-      return { error: "此功能仅在桌面应用中可用" };
-    }
-
     const { apiKey, baseUrl } = getApiConfig();
 
     const tauriParams: TauriVideoStatusParams = {
@@ -263,11 +252,6 @@ export function getVideoContentUrl(taskId: string): string {
 // 获取视频内容并创建 Blob URL（用于预览）
 export async function getVideoContentBlobUrl(taskId: string): Promise<{ url?: string; error?: string }> {
   try {
-    // 检查是否在 Tauri 环境
-    if (!isTauriEnvironment()) {
-      return { error: "此功能仅在桌面应用中可用" };
-    }
-
     const { apiKey, baseUrl } = getApiConfig();
 
     const tauriParams: TauriVideoStatusParams = {
@@ -303,11 +287,6 @@ export async function getVideoContentBlobUrl(taskId: string): Promise<{ url?: st
 // 下载视频文件
 export async function downloadVideo(taskId: string, filename?: string): Promise<{ success: boolean; error?: string }> {
   try {
-    // 检查是否在 Tauri 环境
-    if (!isTauriEnvironment()) {
-      return { success: false, error: "此功能仅在桌面应用中可用" };
-    }
-
     const { apiKey, baseUrl } = getApiConfig();
     const defaultFileName = filename || `sora-video-${Date.now()}.mp4`;
 

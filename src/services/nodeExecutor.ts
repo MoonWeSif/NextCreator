@@ -18,7 +18,7 @@ import { useCanvasStore } from "@/stores/canvasStore";
 import { generateImage, editImage } from "@/services/imageService";
 import { generateLLMContent } from "@/services/llmService";
 import { createVideoTask, pollVideoTask } from "@/services/videoService";
-import { saveImage, isTauriEnvironment, readImage } from "@/services/fileStorageService";
+import { saveImage, readImage } from "@/services/fileStorageService";
 
 // 自定义节点类型
 type CustomNode = Node<CustomNodeData>;
@@ -277,7 +277,7 @@ async function executeImageGeneratorNode(
 
     // 保存图片
     let imagePath: string | undefined;
-    if (isTauriEnvironment() && response.imageData) {
+    if (response.imageData) {
       try {
         const imageInfo = await saveImage(response.imageData, canvasId, node.id);
         imagePath = imageInfo.path;

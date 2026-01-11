@@ -4,7 +4,7 @@ import { useFlowStore } from "@/stores/flowStore";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { generateText, validateJsonOutput } from "@/services/llmService";
 import { editImage } from "@/services/imageService";
-import { saveImage, isTauriEnvironment } from "@/services/fileStorageService";
+import { saveImage } from "@/services/fileStorageService";
 import { generateThumbnail } from "@/utils/imageCompression";
 import type { PPTContentNodeData, PPTOutline, PPTPageItem, ConnectedImageInfo } from "./types";
 import { buildSystemPrompt, buildPageImagePrompt, getVisualStylePrompt, PPT_OUTLINE_JSON_SCHEMA, DEFAULT_OUTLINE_MODEL, DEFAULT_IMAGE_MODEL } from "./types";
@@ -398,11 +398,11 @@ export function usePPTContentExecution({
         }
         const attempts = (currentPage?.result?.attempts || 0) + 1;
 
-        // 在 Tauri 环境下保存图片到文件系统（使用原始画布 ID）
+        // 保存图片到文件系统（使用原始画布 ID）
         let imagePath: string | undefined;
         let thumbnailPath: string | undefined;
         const saveCanvasId = targetCanvasId || currentActiveId;
-        if (isTauriEnvironment() && saveCanvasId) {
+        if (saveCanvasId) {
           try {
             const imageInfo = await saveImage(
               response.imageData,
@@ -411,7 +411,6 @@ export function usePPTContentExecution({
             );
             imagePath = imageInfo.path;
           } catch (saveError) {
-            // 文件保存失败不影响主流程，只是没有本地存储
             console.warn("PPT 页面图片保存到文件系统失败:", saveError);
           }
         }
@@ -425,8 +424,8 @@ export function usePPTContentExecution({
             format: "jpeg",
           });
 
-          // 在 Tauri 环境下也保存缩略图
-          if (isTauriEnvironment() && saveCanvasId && thumbnail) {
+          // 也保存缩略图
+          if (saveCanvasId && thumbnail) {
             try {
               const thumbInfo = await saveImage(
                 thumbnail,
@@ -745,7 +744,7 @@ export function usePPTContentExecution({
         page = currentData?.pages.find((p) => p.id === pageId);
       }
 
-      if (isTauriEnvironment() && activeCanvasId) {
+      if (activeCanvasId) {
         try {
           const imageInfo = await saveImage(
             imageData,
@@ -767,8 +766,8 @@ export function usePPTContentExecution({
           format: "jpeg",
         });
 
-        // 在 Tauri 环境下也保存缩略图
-        if (isTauriEnvironment() && activeCanvasId && manualThumbnail) {
+        // 也保存缩略图
+        if (activeCanvasId && manualThumbnail) {
           try {
             const thumbInfo = await saveImage(
               manualThumbnail,

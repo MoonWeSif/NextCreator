@@ -5,11 +5,6 @@ import { useSettingsStore } from "@/stores/settingsStore";
 // LLM 节点类型
 type LLMNodeType = "llm" | "llmContent";
 
-// 检测是否在 Tauri 环境中
-const isTauri = () => {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-};
-
 // LLM 生成参数
 export interface LLMGenerationParams {
   prompt: string;
@@ -199,11 +194,6 @@ export async function generateText(params: LLMGenerationParams): Promise<LLMResp
   try {
     const provider = getProviderConfig("llm");
 
-    // 检查是否在 Tauri 环境
-    if (!isTauri()) {
-      return { error: "此功能仅在桌面应用中可用" };
-    }
-
     const baseUrl = getBaseUrlByProtocol(provider.baseUrl, provider.protocol || "google");
     const requestParams: TauriLLMParams = {
       baseUrl,
@@ -233,11 +223,6 @@ export async function generateText(params: LLMGenerationParams): Promise<LLMResp
 export async function generateLLMContent(params: LLMGenerationParams): Promise<LLMResponse> {
   try {
     const provider = getProviderConfig("llmContent");
-
-    // 检查是否在 Tauri 环境
-    if (!isTauri()) {
-      return { error: "此功能仅在桌面应用中可用" };
-    }
 
     const baseUrl = getBaseUrlByProtocol(provider.baseUrl, provider.protocol || "google");
     const requestParams: TauriLLMParams = {

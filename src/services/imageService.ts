@@ -1,17 +1,9 @@
-import { GoogleGenAI } from "@google/genai";
 import { invoke } from "@tauri-apps/api/core";
 import type { ImageGenerationParams, ImageEditParams, GenerationResponse, ProviderProtocol, ErrorDetails } from "@/types";
 import { useSettingsStore } from "@/stores/settingsStore";
 
 // 图片节点类型
 type ImageNodeType = "imageGeneratorPro" | "imageGeneratorFast";
-
-// 检测是否在 Tauri 环境中（Tauri 2.0）
-const isTauri = () => {
-  const result = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-  console.log("[imageService] isTauri check:", result, "window keys:", typeof window !== "undefined" ? Object.keys(window).filter(k => k.includes("TAURI")) : []);
-  return result;
-};
 
 // 根据协议类型获取完整的 API Base URL
 function getApiBaseUrl(baseUrl: string, protocol: ProviderProtocol): string {
@@ -48,19 +40,6 @@ function getProviderConfig(nodeType: ImageNodeType) {
   }
 
   return provider;
-}
-
-// 创建 API 客户端（仅用于 Web 环境）
-function createClient(nodeType: ImageNodeType) {
-  const provider = getProviderConfig(nodeType);
-  const apiBaseUrl = getApiBaseUrl(provider.baseUrl, provider.protocol);
-
-  return new GoogleGenAI({
-    apiKey: provider.apiKey,
-    httpOptions: {
-      baseUrl: apiBaseUrl,
-    },
-  });
 }
 
 // Tauri 后端代理请求参数
@@ -188,57 +167,18 @@ export async function generateImage(
     const isPro = params.model === "gemini-3-pro-image-preview";
     const apiBaseUrl = getApiBaseUrl(provider.baseUrl, provider.protocol);
 
-    // 在 Tauri 环境中使用后端代理
-    if (isTauri()) {
-      return await invokeGemini(
-        {
-          baseUrl: apiBaseUrl,
-          apiKey: provider.apiKey,
-          model: params.model,
-          prompt: params.prompt,
-          aspectRatio: params.aspectRatio || "1:1",
-          imageSize: isPro ? params.imageSize : undefined,
-        },
-        { name: provider.name, protocol: provider.protocol }
-      );
-    }
-
-    // Web 环境使用 SDK
-    const client = createClient(nodeType);
-
-    const response = await client.models.generateContent({
-      model: params.model,
-      contents: [{ parts: [{ text: params.prompt }] }],
-      config: {
-        responseModalities: params.responseModalities || ["IMAGE"],
-        imageConfig: {
-          aspectRatio: params.aspectRatio || "1:1",
-          ...(isPro && params.imageSize ? { imageSize: params.imageSize } : {}),
-        },
-        abortSignal,
+    return await invokeGemini(
+      {
+        baseUrl: apiBaseUrl,
+        apiKey: provider.apiKey,
+        model: params.model,
+        prompt: params.prompt,
+        aspectRatio: params.aspectRatio || "1:1",
+        imageSize: isPro ? params.imageSize : undefined,
       },
-    });
-
-    // 解析响应
-    const candidate = response.candidates?.[0];
-    if (!candidate?.content?.parts) {
-      return { error: "无有效响应" };
-    }
-
-    let imageData: string | undefined;
-    let text: string | undefined;
-
-    for (const part of candidate.content.parts) {
-      if (part.inlineData) {
-        imageData = part.inlineData.data;
-      } else if (part.text) {
-        text = part.text;
-      }
-    }
-
-    return { imageData, text };
+      { name: provider.name, protocol: provider.protocol }
+    );
   } catch (error) {
-    // 检查是否是中断错误
     if (error instanceof Error && error.name === "AbortError") {
       return { error: "已取消" };
     }
@@ -260,76 +200,19 @@ export async function editImage(
     const isPro = params.model === "gemini-3-pro-image-preview";
     const apiBaseUrl = getApiBaseUrl(provider.baseUrl, provider.protocol);
 
-    // 在 Tauri 环境中使用后端代理
-    if (isTauri()) {
-      console.log("[imageService] Using Tauri backend proxy");
-      return await invokeGemini(
-        {
-          baseUrl: apiBaseUrl,
-          apiKey: provider.apiKey,
-          model: params.model,
-          prompt: params.prompt,
-          inputImages: params.inputImages,
-          aspectRatio: params.aspectRatio || "1:1",
-          imageSize: isPro ? params.imageSize : undefined,
-        },
-        { name: provider.name, protocol: provider.protocol }
-      );
-    }
-
-    console.log("[imageService] Using browser SDK (not Tauri)");
-    // Web 环境使用 SDK
-    const client = createClient(nodeType);
-
-    const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [
-      { text: params.prompt },
-    ];
-
-    // 添加所有输入图片
-    if (params.inputImages && params.inputImages.length > 0) {
-      for (const imageData of params.inputImages) {
-        parts.push({
-          inlineData: {
-            mimeType: "image/png",
-            data: imageData,
-          },
-        });
-      }
-    }
-
-    const response = await client.models.generateContent({
-      model: params.model,
-      contents: [{ parts }],
-      config: {
-        responseModalities: params.responseModalities || ["IMAGE"],
-        imageConfig: {
-          aspectRatio: params.aspectRatio || "1:1",
-          ...(isPro && params.imageSize ? { imageSize: params.imageSize } : {}),
-        },
-        abortSignal,
+    return await invokeGemini(
+      {
+        baseUrl: apiBaseUrl,
+        apiKey: provider.apiKey,
+        model: params.model,
+        prompt: params.prompt,
+        inputImages: params.inputImages,
+        aspectRatio: params.aspectRatio || "1:1",
+        imageSize: isPro ? params.imageSize : undefined,
       },
-    });
-
-    // 解析响应
-    const candidate = response.candidates?.[0];
-    if (!candidate?.content?.parts) {
-      return { error: "无有效响应" };
-    }
-
-    let imageData: string | undefined;
-    let text: string | undefined;
-
-    for (const part of candidate.content.parts) {
-      if (part.inlineData) {
-        imageData = part.inlineData.data;
-      } else if (part.text) {
-        text = part.text;
-      }
-    }
-
-    return { imageData, text };
+      { name: provider.name, protocol: provider.protocol }
+    );
   } catch (error) {
-    // 检查是否是中断错误
     if (error instanceof Error && error.name === "AbortError") {
       return { error: "已取消" };
     }

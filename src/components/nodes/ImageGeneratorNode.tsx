@@ -4,7 +4,7 @@ import { Sparkles, Zap, Play, AlertCircle, Maximize2, AlertTriangle, CircleAlert
 import { useFlowStore } from "@/stores/flowStore";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { generateImage, editImage } from "@/services/imageGeneration";
-import { saveImage, getImageUrl, isTauriEnvironment, type InputImageInfo } from "@/services/fileStorageService";
+import { saveImage, getImageUrl, type InputImageInfo } from "@/services/fileStorageService";
 import { ImagePreviewModal } from "@/components/ui/ImagePreviewModal";
 import { ErrorDetailModal } from "@/components/ui/ErrorDetailModal";
 import { ModelSelector } from "@/components/ui/ModelSelector";
@@ -170,8 +170,7 @@ function ImageGeneratorBase({
           }, nodeType);
 
       if (response.imageData) {
-        // 在 Tauri 环境中，将图片保存到文件系统
-        if (isTauriEnvironment() && activeCanvasId) {
+        if (activeCanvasId) {
           try {
             // 1. 先处理输入图片（如果有且未保存到文件系统）
             const connectedImages = getConnectedImagesWithInfo(id);
@@ -239,7 +238,7 @@ function ImageGeneratorBase({
             });
           }
         } else {
-          // 非 Tauri 环境或没有画布 ID，使用 base64 存储
+          // 没有画布 ID，使用 base64 存储
           updateNodeDataWithCanvas(id, {
             status: "success",
             outputImage: response.imageData,

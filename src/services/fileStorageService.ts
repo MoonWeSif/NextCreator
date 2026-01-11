@@ -184,14 +184,6 @@ export function formatFileSize(bytes: number): string {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${units[i]}`;
 }
 
-/**
- * 检查是否在 Tauri 环境中运行
- * @returns 是否在 Tauri 环境中
- */
 export function isTauriEnvironment(): boolean {
-  // Tauri 2.x 使用 __TAURI_INTERNALS__ 而不是 __TAURI__
-  return (
-    typeof window !== "undefined" &&
-    ("__TAURI_INTERNALS__" in window || "__TAURI__" in window)
-  );
+  return true;
 }

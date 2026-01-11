@@ -21,7 +21,6 @@ export function StorageManagementModal() {
   const {
     isOpen,
     isLoading,
-    isTauri,
     fileStats,
     storagePath,
     expandedFileCanvases,
@@ -89,7 +88,7 @@ export function StorageManagementModal() {
 
   // 当用户输入搜索关键词时，自动加载所有画布的图片数据
   useEffect(() => {
-    if (!searchQuery.trim() || !fileStats || !isTauri) return;
+    if (!searchQuery.trim() || !fileStats) return;
 
     // 加载所有未加载的画布图片
     const loadAllCanvasImages = async () => {
@@ -103,7 +102,7 @@ export function StorageManagementModal() {
     };
 
     loadAllCanvasImages();
-  }, [searchQuery, fileStats, isTauri, canvasImages, loadCanvasImages]);
+  }, [searchQuery, fileStats, canvasImages, loadCanvasImages]);
 
   if (!isOpen) return null;
 
@@ -405,42 +404,6 @@ export function StorageManagementModal() {
     );
   };
 
-  // 渲染浏览器环境内容
-  const renderBrowserStorage = () => {
-    return (
-      <div className="space-y-4">
-        {/* 存储位置 */}
-        <div className="bg-base-200 rounded-lg p-3">
-          <p className="text-xs text-base-content/60 mb-1">存储位置</p>
-          <p className="text-sm font-mono">{storagePath}</p>
-        </div>
-
-        {/* 说明信息 */}
-        <div className="bg-info/10 rounded-lg p-3 text-sm">
-          <p className="font-medium mb-2 text-info">关于浏览器存储</p>
-          <ul className="text-xs space-y-1 text-base-content/70">
-            <li>• 数据存储在浏览器的 localStorage 中</li>
-            <li>• 图片以 base64 格式内嵌存储</li>
-            <li>• 清除浏览器数据会导致数据丢失</li>
-            <li>• 建议使用桌面应用获得更好的存储管理体验</li>
-          </ul>
-        </div>
-
-        {/* 操作按钮 */}
-        <div className="flex gap-2 pt-3 border-t border-base-300">
-          <button
-            className="btn btn-ghost btn-sm flex-1"
-            onClick={refreshStats}
-            disabled={isLoading}
-          >
-            {isLoading ? <LoadingIndicator size="sm" variant="dots" /> : <RefreshCw className="w-4 h-4" />}
-            刷新
-          </button>
-        </div>
-      </div>
-    );
-  };
-
   const modalContent = createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center">
       {/* 背景遮罩 */}
@@ -500,8 +463,7 @@ export function StorageManagementModal() {
           )}
 
           {/* 根据环境渲染内容 */}
-          {!isLoading && isTauri && renderFileStorage()}
-          {!isLoading && !isTauri && renderBrowserStorage()}
+          {!isLoading && renderFileStorage()}
         </div>
 
         {/* 删除确认对话框 */}

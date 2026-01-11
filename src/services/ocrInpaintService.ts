@@ -58,13 +58,6 @@ interface TestConnectionResult {
 // ==================== 服务函数 ====================
 
 /**
- * 检测 Tauri 环境
- */
-function isTauriEnvironment(): boolean {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-}
-
-/**
  * 处理单个 PPT 页面
  * @param imageData base64 编码的图片
  * @param config 服务配置
@@ -74,10 +67,6 @@ export async function processPageForEditable(
   imageData: string,
   config: OcrInpaintConfig
 ): Promise<{ backgroundImage: string; textBoxes: TextBox[] }> {
-  if (!isTauriEnvironment()) {
-    throw new Error("此功能仅在 Tauri 环境中可用");
-  }
-
   const result = await invoke<ProcessPageResult>("process_ppt_page", {
     params: {
       imageData,
@@ -121,14 +110,6 @@ export async function processAllPages(
   config: OcrInpaintConfig,
   onProgress?: ProgressCallback
 ): Promise<ProcessAllPagesResult> {
-  if (!isTauriEnvironment()) {
-    return {
-      success: false,
-      pages: [],
-      error: "此功能仅在 Tauri 环境中可用",
-    };
-  }
-
   // 先检查服务是否可用
   const servicesCheck = await checkServicesAvailable(config);
 
@@ -190,10 +171,6 @@ export async function processAllPages(
  * @param url OCR 服务地址
  */
 export async function testOcrConnection(url: string): Promise<TestConnectionResult> {
-  if (!isTauriEnvironment()) {
-    return { success: false, message: "此功能仅在 Tauri 环境中可用" };
-  }
-
   return await invoke<TestConnectionResult>("test_ocr_connection", {
     params: { url },
   });
@@ -204,10 +181,6 @@ export async function testOcrConnection(url: string): Promise<TestConnectionResu
  * @param url IOPaint 服务地址
  */
 export async function testInpaintConnection(url: string): Promise<TestConnectionResult> {
-  if (!isTauriEnvironment()) {
-    return { success: false, message: "此功能仅在 Tauri 环境中可用" };
-  }
-
   return await invoke<TestConnectionResult>("test_inpaint_connection", {
     params: { url },
   });

@@ -54,13 +54,6 @@ export class DalleImageProvider implements ImageGenerationProvider {
   readonly maxInputImages = 1;
 
   /**
-   * 检测是否在 Tauri 环境
-   */
-  private isTauri(): boolean {
-    return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-  }
-
-  /**
    * 将宽高比转换为尺寸
    */
   private aspectRatioToSize(aspectRatio?: string): string {
@@ -135,11 +128,7 @@ export class DalleImageProvider implements ImageGenerationProvider {
     }
 
     try {
-      if (this.isTauri()) {
-        return await this.generateViaTauri(request, config);
-      } else {
-        return await this.generateViaFetch(request, config, abortSignal);
-      }
+      return await this.generateViaTauri(request, config);
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") {
         return { error: "已取消" };
@@ -183,57 +172,6 @@ export class DalleImageProvider implements ImageGenerationProvider {
       metadata: {
         model: request.model,
         revisedPrompt: result.revisedPrompt,
-      },
-    };
-  }
-
-  /**
-   * 通过 Fetch API 生成（浏览器环境）
-   */
-  private async generateViaFetch(
-    request: ImageGenerationRequest,
-    config: ProviderConfig,
-    abortSignal?: AbortSignal
-  ): Promise<ImageGenerationResponse> {
-    const url = `${config.baseUrl.replace(/\/+$/, "")}/v1/images/generations`;
-
-    const body = {
-      model: request.model,
-      prompt: request.prompt,
-      size: this.aspectRatioToSize(request.aspectRatio),
-      n: 1,
-      response_format: "b64_json",
-    };
-
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${config.apiKey}`,
-      },
-      body: JSON.stringify(body),
-      signal: abortSignal,
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      return {
-        error: `API 返回错误 (${response.status}): ${errorText}`,
-      };
-    }
-
-    const data = await response.json();
-    const imageData = data.data?.[0];
-
-    if (!imageData) {
-      return { error: "API 未返回有效内容" };
-    }
-
-    return {
-      imageData: imageData.b64_json,
-      metadata: {
-        model: request.model,
-        revisedPrompt: imageData.revised_prompt,
       },
     };
   }
