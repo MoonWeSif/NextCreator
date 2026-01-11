@@ -9,6 +9,7 @@ import {
   MessageSquareText,
   FileUp,
   Palette,
+  Wand2,
 } from "lucide-react";
 import type { NodeCategory } from "@/types";
 
@@ -117,9 +118,23 @@ export const nodeCategories: NodeCategory[] = [
         icon: "Palette",
         defaultData: {
           label: "DALL-E 绘图",
-          model: "dall-e-3",
+          model: "gpt-image-1",
           aspectRatio: "1:1",
           quality: "standard",
+          status: "idle",
+        },
+        inputs: ["prompt", "image"],
+        outputs: ["image"],
+      },
+      {
+        type: "fluxGeneratorNode",
+        label: "Flux 绘图",
+        description: "Flux 图片生成",
+        icon: "Wand2",
+        defaultData: {
+          label: "Flux 绘图",
+          model: "flux-1-pro",
+          aspectRatio: "1:1",
           status: "idle",
         },
         inputs: ["prompt", "image"],
@@ -194,6 +209,7 @@ export const nodeIconMap: Record<string, React.ComponentType<{ className?: strin
   MessageSquareText,
   FileUp,
   Palette,
+  Wand2,
 };
 
 // 图标颜色映射
@@ -208,4 +224,5 @@ export const nodeIconColors: Record<string, string> = {
   MessageSquareText: "bg-teal-500/10 text-teal-500",
   FileUp: "bg-orange-500/10 text-orange-500",
   Palette: "bg-pink-500/10 text-pink-500",
+  Wand2: "bg-violet-500/10 text-violet-500",
 };

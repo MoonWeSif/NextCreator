@@ -1,6 +1,7 @@
 export { PromptNode } from "./PromptNode";
 export { ImageGeneratorProNode, ImageGeneratorFastNode } from "./ImageGeneratorNode";
 export { DalleGeneratorNode } from "./DalleGeneratorNode";
+export { FluxGeneratorNode } from "./FluxGeneratorNode";
 export { ImageInputNode } from "./ImageInputNode";
 export { VideoGeneratorNode } from "./VideoGeneratorNode";
 export { PPTContentNode } from "./PPTContentNode";
@@ -11,6 +12,7 @@ export { FileUploadNode } from "./FileUploadNode";
 import { PromptNode } from "./PromptNode";
 import { ImageGeneratorProNode, ImageGeneratorFastNode } from "./ImageGeneratorNode";
 import { DalleGeneratorNode } from "./DalleGeneratorNode";
+import { FluxGeneratorNode } from "./FluxGeneratorNode";
 import { ImageInputNode } from "./ImageInputNode";
 import { VideoGeneratorNode } from "./VideoGeneratorNode";
 import { PPTContentNode } from "./PPTContentNode";
@@ -24,6 +26,7 @@ export const nodeTypes = {
   imageGeneratorProNode: ImageGeneratorProNode,
   imageGeneratorFastNode: ImageGeneratorFastNode,
   dalleGeneratorNode: DalleGeneratorNode,
+  fluxGeneratorNode: FluxGeneratorNode,
   imageInputNode: ImageInputNode,
   videoGeneratorNode: VideoGeneratorNode,
   pptContentNode: PPTContentNode,

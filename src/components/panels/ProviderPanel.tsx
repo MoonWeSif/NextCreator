@@ -26,6 +26,7 @@ const nodeTypeConfig: { key: keyof NodeProviderMapping; label: string; descripti
   { key: "imageGeneratorPro", label: "NanoBanana Pro", description: "高质量图片生成 / PPT 页面图片生成" },
   { key: "imageGeneratorFast", label: "NanoBanana", description: "快速图片生成节点" },
   { key: "dalleGenerator", label: "DALL-E 绘图", description: "OpenAI DALL-E 图片生成节点" },
+  { key: "fluxGenerator", label: "Flux 绘图", description: "Flux 图片生成节点" },
   { key: "videoGenerator", label: "视频生成", description: "Sora 视频生成节点" },
   { key: "llmContent", label: "LLM 内容生成", description: "大语言模型内容生成节点" },
   { key: "llm", label: "PPT 大纲生成", description: "PPT 内容节点的大纲生成部分" },

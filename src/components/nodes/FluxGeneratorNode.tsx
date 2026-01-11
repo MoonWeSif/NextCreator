@@ -1,6 +1,6 @@
 import { memo, useCallback, useState, useRef } from "react";
 import { Handle, Position, type NodeProps, type Node } from "@xyflow/react";
-import { Palette, Play, AlertCircle, Maximize2, AlertTriangle, CircleAlert } from "lucide-react";
+import { Wand2, Play, AlertCircle, Maximize2, AlertTriangle, CircleAlert } from "lucide-react";
 import { useFlowStore } from "@/stores/flowStore";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { generateImage } from "@/services/imageGeneration";
@@ -11,13 +11,12 @@ import { ModelSelector } from "@/components/ui/ModelSelector";
 import { useLoadingDots } from "@/hooks/useLoadingDots";
 import type { ImageInputNodeData, ModelType, ErrorDetails } from "@/types";
 
-// DALL-E 节点数据类型
-interface DalleGeneratorNodeData {
+// Flux 节点数据类型
+interface FluxGeneratorNodeData {
   [key: string]: unknown;
   label: string;
   model: ModelType;
-  aspectRatio: "1:1" | "16:9" | "9:16";
-  quality: "standard" | "hd";
+  aspectRatio: "1:1" | "16:9" | "9:16" | "4:3" | "3:4";
   status: "idle" | "loading" | "success" | "error";
   outputImage?: string;
   outputImagePath?: string;
@@ -25,14 +24,17 @@ interface DalleGeneratorNodeData {
   errorDetails?: ErrorDetails;
 }
 
-type DalleGeneratorNode = Node<DalleGeneratorNodeData>;
+type FluxGeneratorNode = Node<FluxGeneratorNodeData>;
 
 // 预设模型选项
 const presetModels = [
-  { value: "gpt-image-1.5", label: "GPT Image 1.5" },
-  { value: "gpt-image-1", label: "GPT Image 1" },
-  { value: "gpt-image-1-mini", label: "GPT Image Mini" },
-  { value: "dall-e-3", label: "DALL-E 3" },
+  { value: "flux-2-pro", label: "Flux 2 Pro" },
+  { value: "flux-2-dev", label: "Flux 2 Dev" },
+  { value: "flux-2-flex", label: "Flux 2 Flex" },
+  { value: "flux-1-pro", label: "Flux 1 Pro" },
+  { value: "flux-1-dev", label: "Flux 1 Dev" },
+  { value: "flux-1-schnell", label: "Flux 1 Schnell" },
+  { value: "flux-kontext-pro", label: "Flux Kontext Pro" },
 ];
 
 // 宽高比选项
@@ -40,20 +42,16 @@ const aspectRatioOptions = [
   { value: "1:1", label: "1:1" },
   { value: "16:9", label: "16:9" },
   { value: "9:16", label: "9:16" },
+  { value: "4:3", label: "4:3" },
+  { value: "3:4", label: "3:4" },
 ];
 
-// 质量选项
-const qualityOptions = [
-  { value: "standard", label: "标准" },
-  { value: "hd", label: "高清" },
-];
-
-// DALL-E 节点组件
-function DalleGeneratorBase({
+// Flux 节点组件
+function FluxGeneratorBase({
   id,
   data,
   selected,
-}: NodeProps<DalleGeneratorNode>) {
+}: NodeProps<FluxGeneratorNode>) {
   const { updateNodeData, getConnectedInputData, getConnectedInputDataAsync, getEmptyConnectedInputs, getConnectedImagesWithInfo } = useFlowStore();
   const [showPreview, setShowPreview] = useState(false);
   const [showErrorDetail, setShowErrorDetail] = useState(false);
@@ -73,20 +71,20 @@ function DalleGeneratorBase({
   const canvasIdRef = useRef<string | null>(null);
 
   // 默认模型
-  const defaultModel: ModelType = "gpt-image-1";
+  const defaultModel: ModelType = "flux-1-pro";
   const model: ModelType = data.model || defaultModel;
 
   // 处理模型变更
   const handleModelChange = (value: string) => {
-    updateNodeData<DalleGeneratorNodeData>(id, { model: value });
+    updateNodeData<FluxGeneratorNodeData>(id, { model: value });
   };
 
   // 更新节点数据，同时更新 canvasStore
-  const updateNodeDataWithCanvas = useCallback((nodeId: string, nodeData: Partial<DalleGeneratorNodeData>) => {
+  const updateNodeDataWithCanvas = useCallback((nodeId: string, nodeData: Partial<FluxGeneratorNodeData>) => {
     const { activeCanvasId } = useCanvasStore.getState();
     const targetCanvasId = canvasIdRef.current;
 
-    updateNodeData<DalleGeneratorNodeData>(nodeId, nodeData);
+    updateNodeData<FluxGeneratorNodeData>(nodeId, nodeData);
 
     if (targetCanvasId && targetCanvasId !== activeCanvasId) {
       const canvasStore = useCanvasStore.getState();
@@ -129,8 +127,7 @@ function DalleGeneratorBase({
         model,
         inputImages: images.length > 0 ? images : undefined,
         aspectRatio: data.aspectRatio,
-        imageSize: data.quality === "hd" ? "4K" : undefined,
-      }, "dalleGenerator");
+      }, "fluxGenerator");
 
       if (response.imageData) {
         if (activeCanvasId) {
@@ -186,7 +183,7 @@ function DalleGeneratorBase({
     } catch {
       updateNodeDataWithCanvas(id, { status: "error", error: "生成失败", errorDetails: undefined });
     }
-  }, [id, model, data.aspectRatio, data.quality, updateNodeDataWithCanvas, getConnectedInputDataAsync, getConnectedImagesWithInfo, updateNodeData]);
+  }, [id, model, data.aspectRatio, updateNodeDataWithCanvas, getConnectedInputDataAsync, getConnectedImagesWithInfo, updateNodeData]);
 
   return (
     <>
@@ -226,10 +223,10 @@ function DalleGeneratorBase({
           参考图
         </div>
 
-        {/* 节点头部 */}
-        <div className="flex items-center justify-between px-3 py-2 bg-gradient-to-r from-pink-500 to-rose-500 rounded-t-lg">
+        {/* 节点头部 - 紫色渐变 */}
+        <div className="flex items-center justify-between px-3 py-2 bg-gradient-to-r from-violet-500 to-purple-500 rounded-t-lg">
           <div className="flex items-center gap-2">
-            <Palette className="w-4 h-4 text-white" />
+            <Wand2 className="w-4 h-4 text-white" />
             <span className="text-sm font-medium text-white">{data.label}</span>
           </div>
           <div className="flex items-center gap-1">
@@ -261,7 +258,7 @@ function DalleGeneratorBase({
           <div>
             <label className="text-xs text-base-content/60 mb-0.5 block">宽高比</label>
             <div className="grid grid-cols-3 gap-1">
-              {aspectRatioOptions.map((opt) => (
+              {aspectRatioOptions.slice(0, 3).map((opt) => (
                 <button
                   key={opt.value}
                   type="button"
@@ -269,28 +266,23 @@ function DalleGeneratorBase({
                   onPointerDown={(e) => e.stopPropagation()}
                   onClick={(e) => {
                     e.stopPropagation();
-                    updateNodeData<DalleGeneratorNodeData>(id, { aspectRatio: opt.value as DalleGeneratorNodeData["aspectRatio"] });
+                    updateNodeData<FluxGeneratorNodeData>(id, { aspectRatio: opt.value as FluxGeneratorNodeData["aspectRatio"] });
                   }}
                 >
                   {opt.label}
                 </button>
               ))}
             </div>
-          </div>
-
-          {/* 质量选项 */}
-          <div>
-            <label className="text-xs text-base-content/60 mb-0.5 block">质量</label>
-            <div className="grid grid-cols-2 gap-1">
-              {qualityOptions.map((opt) => (
+            <div className="grid grid-cols-2 gap-1 mt-1">
+              {aspectRatioOptions.slice(3).map((opt) => (
                 <button
                   key={opt.value}
                   type="button"
-                  className={`btn btn-xs ${(data.quality || "standard") === opt.value ? "btn-secondary" : "btn-ghost bg-base-200"}`}
+                  className={`btn btn-xs ${(data.aspectRatio || "1:1") === opt.value ? "btn-secondary" : "btn-ghost bg-base-200"}`}
                   onPointerDown={(e) => e.stopPropagation()}
                   onClick={(e) => {
                     e.stopPropagation();
-                    updateNodeData<DalleGeneratorNodeData>(id, { quality: opt.value as DalleGeneratorNodeData["quality"] });
+                    updateNodeData<FluxGeneratorNodeData>(id, { aspectRatio: opt.value as FluxGeneratorNodeData["aspectRatio"] });
                   }}
                 >
                   {opt.label}
@@ -356,7 +348,7 @@ function DalleGeneratorBase({
           type="source"
           position={Position.Right}
           id="output-image"
-          className="!w-3 !h-3 !bg-pink-500 !border-2 !border-white"
+          className="!w-3 !h-3 !bg-violet-500 !border-2 !border-white"
         />
       </div>
 
@@ -382,8 +374,8 @@ function DalleGeneratorBase({
   );
 }
 
-// 导出 DALL-E 节点
-export const DalleGeneratorNode = memo((props: NodeProps<DalleGeneratorNode>) => {
-  return <DalleGeneratorBase {...props} />;
+// 导出 Flux 节点
+export const FluxGeneratorNode = memo((props: NodeProps<FluxGeneratorNode>) => {
+  return <FluxGeneratorBase {...props} />;
 });
-DalleGeneratorNode.displayName = "DalleGeneratorNode";
+FluxGeneratorNode.displayName = "FluxGeneratorNode";

@@ -218,6 +218,7 @@ export interface NodeProviderMapping {
   imageGeneratorPro?: string;   // Pro 图片节点使用的供应商 ID
   imageGeneratorFast?: string;  // Fast 图片节点使用的供应商 ID
   dalleGenerator?: string;      // DALL-E 图片节点使用的供应商 ID
+  fluxGenerator?: string;       // Flux 图片节点使用的供应商 ID
   videoGenerator?: string;      // 视频节点使用的供应商 ID
   llm?: string;                 // PPT 内容生成节点使用的 LLM 供应商 ID
   llmContent?: string;          // LLM 内容生成节点使用的供应商 ID

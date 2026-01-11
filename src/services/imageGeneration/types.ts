@@ -114,4 +114,4 @@ export interface ImageGenerationProvider {
 /**
  * 图片节点类型
  */
-export type ImageNodeType = "imageGeneratorPro" | "imageGeneratorFast" | "dalleGenerator";
+export type ImageNodeType = "imageGeneratorPro" | "imageGeneratorFast" | "dalleGenerator" | "fluxGenerator";

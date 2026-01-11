@@ -4,6 +4,4 @@
 
 export { geminiImageProvider, GeminiImageProvider } from "./gemini";
 export { dalleImageProvider, DalleImageProvider } from "./dalle";
-
-// 未来可以在这里添加更多提供商
-// export { tongYiImageProvider, TongYiImageProvider } from "./tongyi";
+export { fluxImageProvider, FluxImageProvider } from "./flux";
