@@ -4,10 +4,13 @@
  * 解决画布切换时轮询状态丢失的问题
  */
 
+import { invoke } from "@tauri-apps/api/core";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useFlowStore } from "@/stores/flowStore";
+import { useSettingsStore } from "@/stores/settingsStore";
 import type { VideoGeneratorNodeData } from "@/types";
 import { pollVideoTask, type VideoProgressInfo } from "./videoGeneration";
+import type { VeoGeneratorNodeData } from "@/components/nodes/VeoGeneratorNode";
 
 // 任务状态
 export type TaskStatus = "running" | "completed" | "failed" | "cancelled";
@@ -17,7 +20,7 @@ export interface TaskInfo {
   taskId: string;
   nodeId: string;
   canvasId: string;
-  type: "video" | "image";
+  type: "video" | "image" | "veo";
   status: TaskStatus;
   progress: number;
   stage?: string;
@@ -64,6 +67,40 @@ class TaskManager {
 
     // 开始轮询
     this.startPolling(taskKey, taskId, abortController.signal);
+  }
+
+  /**
+   * 注册一个 Veo 视频生成任务
+   */
+  registerVeoTask(
+    taskId: string,
+    nodeId: string,
+    canvasId: string
+  ): void {
+    const taskKey = this.getTaskKey(nodeId, canvasId);
+
+    // 如果已有相同的任务，先取消
+    this.cancelTask(nodeId, canvasId);
+
+    const taskInfo: TaskInfo = {
+      taskId,
+      nodeId,
+      canvasId,
+      type: "veo",
+      status: "running",
+      progress: 0,
+      stage: "queued",
+      startTime: Date.now(),
+    };
+
+    this.tasks.set(taskKey, taskInfo);
+
+    // 创建 AbortController
+    const abortController = new AbortController();
+    this.abortControllers.set(taskKey, abortController);
+
+    // 开始 Veo 轮询
+    this.startVeoPolling(taskKey, taskId, abortController.signal);
   }
 
   /**
@@ -119,6 +156,111 @@ class TaskManager {
   }
 
   /**
+   * 开始 Veo 任务轮询
+   */
+  private async startVeoPolling(
+    taskKey: string,
+    taskId: string,
+    signal: AbortSignal
+  ): Promise<void> {
+    const task = this.tasks.get(taskKey);
+    if (!task) return;
+
+    // 获取供应商配置
+    const { settings } = useSettingsStore.getState();
+    const providerId = settings.nodeProviders.veoGenerator;
+    const provider = settings.providers.find((p) => p.id === providerId);
+
+    if (!provider) {
+      this.updateTask(taskKey, { status: "failed", error: "未配置供应商" });
+      this.syncErrorToVeoNode(task, "未配置供应商");
+      return;
+    }
+
+    const maxAttempts = 120; // 最多轮询 10 分钟
+    const interval = 5000;   // 5秒间隔
+    let attempts = 0;
+
+    try {
+      while (attempts < maxAttempts) {
+        // 检查是否被取消
+        if (signal.aborted) {
+          return;
+        }
+
+        // 调用 Veo 状态查询
+        const result = await invoke<{ success: boolean; taskId?: string; status?: string; progress?: number; error?: string }>("veo_get_status", {
+          params: {
+            baseUrl: provider.baseUrl,
+            apiKey: provider.apiKey,
+            taskId,
+          },
+        });
+
+        if (!result.success && result.error) {
+          this.updateTask(taskKey, { status: "failed", error: result.error });
+          this.syncErrorToVeoNode(task, result.error);
+          return;
+        }
+
+        const stage = result.status || "queued";
+        const progress = result.progress || 0;
+
+        // 更新任务信息
+        this.updateTask(taskKey, {
+          progress,
+          stage,
+          status: stage === "completed" ? "completed" :
+                 stage === "failed" || stage === "failure" ? "failed" : "running",
+        });
+
+        // 同步更新到节点
+        this.syncToVeoNode(taskKey, {
+          progress,
+          stage: stage as "queued" | "in_progress" | "completed" | "failed",
+          taskId,
+        });
+
+        // 检查是否完成
+        if (stage === "completed") {
+          this.updateTask(taskKey, { status: "completed", progress: 100 });
+          return;
+        }
+
+        if (stage === "failed" || stage === "failure") {
+          this.updateTask(taskKey, { status: "failed", error: result.error || "生成失败" });
+          this.syncErrorToVeoNode(task, result.error || "生成失败");
+          return;
+        }
+
+        // 等待后继续轮询
+        await new Promise<void>((resolve) => {
+          const timeoutId = setTimeout(resolve, interval);
+          if (signal) {
+            const onAbort = () => {
+              clearTimeout(timeoutId);
+              resolve();
+            };
+            signal.addEventListener("abort", onAbort, { once: true });
+          }
+        });
+        attempts++;
+      }
+
+      // 超时
+      this.updateTask(taskKey, { status: "failed", error: "任务超时" });
+      this.syncErrorToVeoNode(task, "任务超时");
+
+    } catch (error) {
+      if (!signal.aborted) {
+        const errorMessage = error instanceof Error ? error.message : "任务失败";
+        this.updateTask(taskKey, { status: "failed", error: errorMessage });
+        this.syncErrorToVeoNode(task, errorMessage);
+      }
+    }
+  }
+
+  /**
    * 同步进度到节点数据
    */
   private syncToNode(taskKey: string, info: VideoProgressInfo): void {
@@ -150,6 +292,33 @@ class TaskManager {
   }
 
   /**
+   * 同步进度到 Veo 节点数据
+   */
+  private syncToVeoNode(taskKey: string, info: VideoProgressInfo): void {
+    const task = this.tasks.get(taskKey);
+    if (!task) return;
+
+    const { activeCanvasId } = useCanvasStore.getState();
+    const { updateNodeData } = useFlowStore.getState();
+
+    const nodeUpdate: Partial<VeoGeneratorNodeData> = {
+      progress: info.progress,
+      taskStage: info.stage,
+      taskId: info.taskId,
+      status: info.stage === "completed" ? "success" :
+             info.stage === "failed" ? "error" : "loading",
+    };
+
+    // 如果当前在该任务所属的画布，直接更新 flowStore
+    if (activeCanvasId === task.canvasId) {
+      updateNodeData<VeoGeneratorNodeData>(task.nodeId, nodeUpdate);
+    }
+
+    // 同时更新 canvasStore 中的数据
+    this.updateCanvasNodeData(task.canvasId, task.nodeId, nodeUpdate);
+  }
+
+  /**
    * 同步错误状态到节点
    */
   private syncErrorToNode(task: TaskInfo, error: string): void {
@@ -172,12 +341,32 @@ class TaskManager {
   }
 
   /**
+   * 同步错误状态到 Veo 节点
+   */
+  private syncErrorToVeoNode(task: TaskInfo, error: string): void {
+    const { activeCanvasId } = useCanvasStore.getState();
+    const { updateNodeData } = useFlowStore.getState();
+
+    const nodeUpdate: Partial<VeoGeneratorNodeData> = {
+      status: "error",
+      error,
+      taskStage: "failed",
+    };
+
+    if (activeCanvasId === task.canvasId) {
+      updateNodeData<VeoGeneratorNodeData>(task.nodeId, nodeUpdate);
+    }
+
+    this.updateCanvasNodeData(task.canvasId, task.nodeId, nodeUpdate);
+  }
+
+  /**
    * 更新 canvasStore 中特定画布的节点数据
    */
   private updateCanvasNodeData(
     canvasId: string,
     nodeId: string,
-    data: Partial<VideoGeneratorNodeData>
+    data: Partial<VideoGeneratorNodeData | VeoGeneratorNodeData>
   ): void {
     const canvasStore = useCanvasStore.getState();
     const canvas = canvasStore.canvases.find(c => c.id === canvasId);

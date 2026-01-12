@@ -7,6 +7,7 @@ export { DoubaoGeneratorNode } from "./DoubaoGeneratorNode";
 export { ZImageGeneratorNode } from "./ZImageGeneratorNode";
 export { ImageInputNode } from "./ImageInputNode";
 export { VideoGeneratorNode } from "./VideoGeneratorNode";
+export { VeoGeneratorNode } from "./VeoGeneratorNode";
 export { PPTContentNode } from "./PPTContentNode";
 export { PPTAssemblerNode } from "./PPTAssemblerNode";
 export { LLMContentNode } from "./LLMContentNode";
@@ -21,6 +22,7 @@ import { DoubaoGeneratorNode } from "./DoubaoGeneratorNode";
 import { ZImageGeneratorNode } from "./ZImageGeneratorNode";
 import { ImageInputNode } from "./ImageInputNode";
 import { VideoGeneratorNode } from "./VideoGeneratorNode";
+import { VeoGeneratorNode } from "./VeoGeneratorNode";
 import { PPTContentNode } from "./PPTContentNode";
 import { PPTAssemblerNode } from "./PPTAssemblerNode";
 import { LLMContentNode } from "./LLMContentNode";
@@ -38,6 +40,7 @@ export const nodeTypes = {
   zImageGeneratorNode: ZImageGeneratorNode,
   imageInputNode: ImageInputNode,
   videoGeneratorNode: VideoGeneratorNode,
+  veoGeneratorNode: VeoGeneratorNode,
   pptContentNode: PPTContentNode,
   pptAssemblerNode: PPTAssemblerNode,
   llmContentNode: LLMContentNode,

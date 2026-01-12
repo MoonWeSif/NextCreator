@@ -42,6 +42,10 @@ pub fn run() {
             video_create_task,
             video_get_status,
             video_get_content,
+            // Veo 视频服务命令
+            veo_create_task,
+            veo_get_status,
+            veo_get_content,
             // DALL-E 图片生成命令
             dalle_generate_image
         ])

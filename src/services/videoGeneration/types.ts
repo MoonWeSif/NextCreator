@@ -150,4 +150,4 @@ export interface VideoGenerationProvider {
 /**
  * 视频节点类型
  */
-export type VideoNodeType = "videoGenerator";
+export type VideoNodeType = "videoGenerator" | "veoGenerator";

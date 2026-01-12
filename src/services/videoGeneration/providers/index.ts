@@ -3,3 +3,11 @@
  */
 
 export { soraVideoProvider, SoraVideoProvider } from "./sora";
+export { veoVideoProvider, VeoVideoProvider } from "./veo";
+export type {
+  VeoGenerationRequest,
+  VeoAspectRatio,
+  VeoDurationType,
+  VeoPersonGeneration,
+  VeoReferenceImage,
+} from "./veo";

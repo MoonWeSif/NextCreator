@@ -33,4 +33,11 @@ export {
 } from "./videoGenerationService";
 
 // 提供商导出
-export { soraVideoProvider, SoraVideoProvider } from "./providers";
+export { soraVideoProvider, SoraVideoProvider, veoVideoProvider, VeoVideoProvider } from "./providers";
+export type {
+  VeoGenerationRequest,
+  VeoAspectRatio,
+  VeoDurationType,
+  VeoPersonGeneration,
+  VeoReferenceImage,
+} from "./providers";

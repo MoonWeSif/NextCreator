@@ -3,7 +3,7 @@
  */
 
 import { videoGenerationRegistry } from "./registry";
-import { soraVideoProvider } from "./providers";
+import { soraVideoProvider, veoVideoProvider } from "./providers";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { toast } from "@/stores/toastStore";
 import type {
@@ -22,6 +22,8 @@ import type {
 export function initializeVideoGenerationProviders(): void {
   // 注册 Sora 提供商（OpenAI Video API 格式）
   videoGenerationRegistry.register(soraVideoProvider);
+  // 注册 Veo 提供商（Gemini Veo API 格式）
+  videoGenerationRegistry.register(veoVideoProvider);
 
   console.log(
     "[VideoGenService] Providers initialized:",

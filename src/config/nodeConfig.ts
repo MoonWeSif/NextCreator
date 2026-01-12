@@ -12,6 +12,7 @@ import {
   Wand2,
   Flame,
   Box,
+  Film,
 } from "lucide-react";
 import type { NodeCategory } from "@/types";
 
@@ -108,6 +109,22 @@ export const nodeCategories: NodeCategory[] = [
           model: "sora-2",
           seconds: "10",
           size: "1280x720",
+          status: "idle",
+        },
+        inputs: ["prompt", "image"],
+        outputs: ["video"],
+      },
+      {
+        type: "veoGeneratorNode",
+        label: "Veo 视频生成",
+        description: "使用 Gemini Veo 模型生成视频",
+        icon: "Film",
+        defaultData: {
+          label: "Veo 视频",
+          model: "veo-3.1-fast-generate-preview",
+          aspectRatio: "16:9",
+          durationSeconds: 8,
+          generationMode: "text2video",
           status: "idle",
         },
         inputs: ["prompt", "image"],
@@ -261,6 +278,7 @@ export const nodeIconMap: Record<string, React.ComponentType<{ className?: strin
   Wand2,
   Flame,
   Box,
+  Film,
 };
 
 // 图标颜色映射
@@ -278,4 +296,5 @@ export const nodeIconColors: Record<string, string> = {
   Wand2: "bg-violet-500/10 text-violet-500",
   Flame: "bg-cyan-500/10 text-cyan-500",
   Box: "bg-indigo-500/10 text-indigo-500",
+  Film: "bg-fuchsia-500/10 text-fuchsia-500",
 };
