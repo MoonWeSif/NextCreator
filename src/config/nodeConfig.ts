@@ -10,6 +10,7 @@ import {
   FileUp,
   Palette,
   Wand2,
+  Flame,
 } from "lucide-react";
 import type { NodeCategory } from "@/types";
 
@@ -118,7 +119,7 @@ export const nodeCategories: NodeCategory[] = [
         icon: "Palette",
         defaultData: {
           label: "DALL-E 绘图",
-          model: "gpt-image-1",
+          model: "dall-e-3",
           aspectRatio: "1:1",
           quality: "standard",
           status: "idle",
@@ -135,6 +136,38 @@ export const nodeCategories: NodeCategory[] = [
           label: "Flux 绘图",
           model: "flux-1-pro",
           aspectRatio: "1:1",
+          status: "idle",
+        },
+        inputs: ["prompt", "image"],
+        outputs: ["image"],
+      },
+      {
+        type: "gptImageGeneratorNode",
+        label: "GPT Image 绘图",
+        description: "OpenAI GPT Image 图片生成",
+        icon: "Wand2",
+        defaultData: {
+          label: "GPT Image 绘图",
+          model: "gpt-image-1",
+          aspectRatio: "1:1",
+          quality: "medium",
+          background: "auto",
+          status: "idle",
+        },
+        inputs: ["prompt", "image"],
+        outputs: ["image"],
+      },
+      {
+        type: "doubaoGeneratorNode",
+        label: "豆包绘图",
+        description: "字节跳动豆包图片生成",
+        icon: "Flame",
+        defaultData: {
+          label: "豆包绘图",
+          model: "doubao-seedream-3-0-t2i-250415",
+          aspectRatio: "1:1",
+          guidanceScale: 5,
+          watermark: false,
           status: "idle",
         },
         inputs: ["prompt", "image"],
@@ -210,6 +243,7 @@ export const nodeIconMap: Record<string, React.ComponentType<{ className?: strin
   FileUp,
   Palette,
   Wand2,
+  Flame,
 };
 
 // 图标颜色映射
@@ -225,4 +259,5 @@ export const nodeIconColors: Record<string, string> = {
   FileUp: "bg-orange-500/10 text-orange-500",
   Palette: "bg-pink-500/10 text-pink-500",
   Wand2: "bg-violet-500/10 text-violet-500",
+  Flame: "bg-cyan-500/10 text-cyan-500",
 };

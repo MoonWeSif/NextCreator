@@ -29,10 +29,8 @@ type DalleGeneratorNode = Node<DalleGeneratorNodeData>;
 
 // 预设模型选项
 const presetModels = [
-  { value: "gpt-image-1.5", label: "GPT Image 1.5" },
-  { value: "gpt-image-1", label: "GPT Image 1" },
-  { value: "gpt-image-1-mini", label: "GPT Image Mini" },
   { value: "dall-e-3", label: "DALL-E 3" },
+  { value: "dall-e-2", label: "DALL-E 2" },
 ];
 
 // 宽高比选项
@@ -73,7 +71,7 @@ function DalleGeneratorBase({
   const canvasIdRef = useRef<string | null>(null);
 
   // 默认模型
-  const defaultModel: ModelType = "gpt-image-1";
+  const defaultModel: ModelType = "dall-e-3";
   const model: ModelType = data.model || defaultModel;
 
   // 处理模型变更

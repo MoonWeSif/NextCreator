@@ -219,6 +219,8 @@ export interface NodeProviderMapping {
   imageGeneratorFast?: string;  // Fast 图片节点使用的供应商 ID
   dalleGenerator?: string;      // DALL-E 图片节点使用的供应商 ID
   fluxGenerator?: string;       // Flux 图片节点使用的供应商 ID
+  gptImageGenerator?: string;   // GPT Image 图片节点使用的供应商 ID
+  doubaoGenerator?: string;     // 豆包图片节点使用的供应商 ID
   videoGenerator?: string;      // 视频节点使用的供应商 ID
   llm?: string;                 // PPT 内容生成节点使用的 LLM 供应商 ID
   llmContent?: string;          // LLM 内容生成节点使用的供应商 ID
@@ -230,6 +232,8 @@ export const NODE_ALLOWED_PROTOCOLS: Record<keyof NodeProviderMapping, ProviderP
   imageGeneratorFast: ["google"],
   dalleGenerator: ["openai"],
   fluxGenerator: ["openai"],
+  gptImageGenerator: ["openai"],
+  doubaoGenerator: ["openai"],
   videoGenerator: ["openai"],
   llm: ["google", "openai", "claude"],
   llmContent: ["google", "openai", "claude"],
