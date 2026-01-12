@@ -224,6 +224,7 @@ export interface NodeProviderMapping {
   zImageGenerator?: string;     // Z-Image 图片节点使用的供应商 ID
   videoGenerator?: string;      // 视频节点使用的供应商 ID
   veoGenerator?: string;        // Veo 视频节点使用的供应商 ID
+  klingGenerator?: string;      // Kling 视频节点使用的供应商 ID
   llm?: string;                 // PPT 内容生成节点使用的 LLM 供应商 ID
   llmContent?: string;          // LLM 内容生成节点使用的供应商 ID
 }
@@ -239,6 +240,7 @@ export const NODE_ALLOWED_PROTOCOLS: Record<keyof NodeProviderMapping, ProviderP
   zImageGenerator: ["openai"],  // Z-Image 使用 OpenAI DALL-E 格式
   videoGenerator: ["openai"],
   veoGenerator: ["openai", "google"],  // Veo 支持 OpenAI 兼容和 Google 协议
+  klingGenerator: ["openai"],  // Kling 使用 OpenAI 兼容协议
   llm: ["google", "openai", "claude"],
   llmContent: ["google", "openai", "claude"],
 };

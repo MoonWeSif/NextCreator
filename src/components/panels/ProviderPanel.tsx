@@ -33,6 +33,7 @@ const nodeTypeConfig: { key: keyof NodeProviderMapping; label: string; descripti
   { key: "zImageGenerator", label: "Z-Image 绘图", description: "Gitee AI Z-Image 图片生成节点" },
   { key: "videoGenerator", label: "视频生成", description: "Sora 视频生成节点" },
   { key: "veoGenerator", label: "Veo 视频生成", description: "Gemini Veo 视频生成节点" },
+  { key: "klingGenerator", label: "Kling 视频生成", description: "Kling 视频生成节点" },
   { key: "llmContent", label: "LLM 内容生成", description: "大语言模型内容生成节点" },
   { key: "llm", label: "PPT 大纲生成", description: "PPT 内容节点的大纲生成部分" },
 ];

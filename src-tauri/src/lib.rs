@@ -46,6 +46,11 @@ pub fn run() {
             veo_create_task,
             veo_get_status,
             veo_get_content,
+            // Kling 视频服务命令
+            kling_create_task,
+            kling_get_status,
+            kling_get_content,
+            kling_download_video,
             // DALL-E 图片生成命令
             dalle_generate_image
         ])

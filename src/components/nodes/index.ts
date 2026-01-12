@@ -8,6 +8,7 @@ export { ZImageGeneratorNode } from "./ZImageGeneratorNode";
 export { ImageInputNode } from "./ImageInputNode";
 export { VideoGeneratorNode } from "./VideoGeneratorNode";
 export { VeoGeneratorNode } from "./VeoGeneratorNode";
+export { KlingGeneratorNode } from "./KlingGeneratorNode";
 export { PPTContentNode } from "./PPTContentNode";
 export { PPTAssemblerNode } from "./PPTAssemblerNode";
 export { LLMContentNode } from "./LLMContentNode";
@@ -23,6 +24,7 @@ import { ZImageGeneratorNode } from "./ZImageGeneratorNode";
 import { ImageInputNode } from "./ImageInputNode";
 import { VideoGeneratorNode } from "./VideoGeneratorNode";
 import { VeoGeneratorNode } from "./VeoGeneratorNode";
+import { KlingGeneratorNode } from "./KlingGeneratorNode";
 import { PPTContentNode } from "./PPTContentNode";
 import { PPTAssemblerNode } from "./PPTAssemblerNode";
 import { LLMContentNode } from "./LLMContentNode";
@@ -41,6 +43,7 @@ export const nodeTypes = {
   imageInputNode: ImageInputNode,
   videoGeneratorNode: VideoGeneratorNode,
   veoGeneratorNode: VeoGeneratorNode,
+  klingGeneratorNode: KlingGeneratorNode,
   pptContentNode: PPTContentNode,
   pptAssemblerNode: PPTAssemblerNode,
   llmContentNode: LLMContentNode,
