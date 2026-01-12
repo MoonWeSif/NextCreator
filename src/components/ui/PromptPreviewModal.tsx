@@ -12,9 +12,11 @@ import {
   Sparkles,
   ImagePlus,
   RectangleHorizontal,
+  Heart,
 } from "lucide-react";
 import type { PromptItem } from "@/config/promptConfig";
 import { ImagePreviewModal } from "@/components/ui/ImagePreviewModal";
+import { useFavoritePromptStore } from "@/stores/favoritePromptStore";
 
 interface PromptPreviewModalProps {
   prompt: PromptItem | null;
@@ -30,6 +32,10 @@ export function PromptPreviewModal({ prompt, isOpen, onClose }: PromptPreviewMod
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [isImagePreviewOpen, setIsImagePreviewOpen] = useState(false);
+
+  // 收藏功能
+  const { isFavorite, toggleFavorite } = useFavoritePromptStore();
+  const isCurrentFavorite = prompt ? isFavorite(prompt.id) : false;
 
   // 处理打开/关闭动画
   useEffect(() => {
@@ -270,6 +276,20 @@ export function PromptPreviewModal({ prompt, isOpen, onClose }: PromptPreviewMod
           <div className="flex items-center justify-end gap-2">
             <button className="btn btn-ghost btn-sm" onClick={handleClose}>
               关闭
+            </button>
+            {/* 收藏按钮 */}
+            <button
+              className={`btn btn-sm gap-1.5 ${
+                isCurrentFavorite
+                  ? "btn-error text-white"
+                  : "btn-ghost"
+              }`}
+              onClick={() => prompt && toggleFavorite(prompt.id)}
+            >
+              <Heart
+                className={`w-4 h-4 ${isCurrentFavorite ? "fill-current" : ""}`}
+              />
+              {isCurrentFavorite ? "已收藏" : "收藏"}
             </button>
             <button
               className={`btn btn-primary btn-sm gap-1.5 ${copied ? "btn-success" : ""}`}
