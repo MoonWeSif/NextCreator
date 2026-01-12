@@ -17,7 +17,7 @@ import { useFlowStore } from "@/stores/flowStore";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { generateImage, editImage } from "@/services/imageService";
 import { generateLLMContent } from "@/services/llmService";
-import { createVideoTask, pollVideoTask } from "@/services/videoService";
+import { createVideoTask, pollVideoTask } from "@/services/videoGeneration";
 import { saveImage, readImage } from "@/services/fileStorageService";
 
 // 自定义节点类型
@@ -449,7 +449,7 @@ async function executeVideoGeneratorNode(
       seconds: data.seconds,
       size: data.size,
       inputImage: images.length > 0 ? images[0] : undefined,
-    }, signal);
+    }, "videoGenerator", signal);
 
     if (createResult.error || !createResult.taskId) {
       const errorMsg = createResult.error || "创建任务失败";

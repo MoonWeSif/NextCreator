@@ -7,7 +7,7 @@
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useFlowStore } from "@/stores/flowStore";
 import type { VideoGeneratorNodeData } from "@/types";
-import { pollVideoTask, type VideoProgressInfo } from "./videoService";
+import { pollVideoTask, type VideoProgressInfo } from "./videoGeneration";
 
 // 任务状态
 export type TaskStatus = "running" | "completed" | "failed" | "cancelled";

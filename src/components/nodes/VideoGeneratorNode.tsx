@@ -4,7 +4,7 @@ import { Handle, Position, type NodeProps, type Node } from "@xyflow/react";
 import { Video, Play, AlertCircle, Square, Download, CheckCircle2, Eye, X, Settings2, Link2Off, Loader2, AlertTriangle, CircleAlert } from "lucide-react";
 import { useFlowStore } from "@/stores/flowStore";
 import { useCanvasStore } from "@/stores/canvasStore";
-import { createVideoTask, getVideoContentBlobUrl, downloadVideo, type VideoTaskStage } from "@/services/videoService";
+import { createVideoTask, getVideoContentBlobUrl, downloadVideo, type VideoTaskStage } from "@/services/videoGeneration";
 import { taskManager } from "@/services/taskManager";
 import { useLoadingDots } from "@/hooks/useLoadingDots";
 import { ErrorDetailModal } from "@/components/ui/ErrorDetailModal";
