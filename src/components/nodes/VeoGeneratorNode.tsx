@@ -237,29 +237,67 @@ export const VeoGeneratorNode = memo(({ id, data, selected }: NodeProps<VeoGener
 
     // 验证模式和图片数量
     const mode = data.generationMode || "text2video";
-    if (mode === "image2video" && images.length < 1) {
-      updateNodeData<VeoGeneratorNodeData>(id, {
-        status: "error",
-        error: "图生视频模式需要连接至少1张图片",
-        errorDetails: undefined,
-      });
-      return;
+    if (mode === "image2video") {
+      if (images.length < 1) {
+        updateNodeData<VeoGeneratorNodeData>(id, {
+          status: "error",
+          error: "图生视频模式需要连接 1 张图片（作为首帧）",
+          errorDetails: undefined,
+        });
+        return;
+      }
+      if (images.length > 1) {
+        updateNodeData<VeoGeneratorNodeData>(id, {
+          status: "error",
+          error: "图生视频模式仅支持 1 张图片，请移除多余图片连接",
+          errorDetails: undefined,
+        });
+        return;
+      }
     }
-    if (mode === "interpolation" && images.length < 2) {
-      updateNodeData<VeoGeneratorNodeData>(id, {
-        status: "error",
-        error: "帧插值模式需要连接2张图片（首帧和尾帧）",
-        errorDetails: undefined,
-      });
-      return;
+    if (mode === "interpolation") {
+      if (images.length < 2) {
+        updateNodeData<VeoGeneratorNodeData>(id, {
+          status: "error",
+          error: "帧插值模式需要连接 2 张图片（首帧和尾帧）",
+          errorDetails: undefined,
+        });
+        return;
+      }
+      if (images.length > 2) {
+        updateNodeData<VeoGeneratorNodeData>(id, {
+          status: "error",
+          error: "帧插值模式仅支持 2 张图片，请移除多余图片连接",
+          errorDetails: undefined,
+        });
+        return;
+      }
     }
-    if (mode === "reference" && isFastModel) {
-      updateNodeData<VeoGeneratorNodeData>(id, {
-        status: "error",
-        error: "参考图片功能仅标准版支持，请切换到 Veo 3.1 标准版",
-        errorDetails: undefined,
-      });
-      return;
+    if (mode === "reference") {
+      if (isFastModel) {
+        updateNodeData<VeoGeneratorNodeData>(id, {
+          status: "error",
+          error: "参考图片功能仅标准版支持，请切换到 Veo 3.1 标准版",
+          errorDetails: undefined,
+        });
+        return;
+      }
+      if (images.length < 1) {
+        updateNodeData<VeoGeneratorNodeData>(id, {
+          status: "error",
+          error: "参考图片模式需要连接 1-3 张图片",
+          errorDetails: undefined,
+        });
+        return;
+      }
+      if (images.length > 3) {
+        updateNodeData<VeoGeneratorNodeData>(id, {
+          status: "error",
+          error: "参考图片最多支持 3 张，请移除多余图片连接",
+          errorDetails: undefined,
+        });
+        return;
+      }
     }
 
     // 清理旧的预览
