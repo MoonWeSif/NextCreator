@@ -231,8 +231,8 @@ export interface NodeProviderMapping {
 
 // 节点类型允许的协议映射
 export const NODE_ALLOWED_PROTOCOLS: Record<keyof NodeProviderMapping, ProviderProtocol[]> = {
-  imageGeneratorPro: ["google"],
-  imageGeneratorFast: ["google"],
+  imageGeneratorPro: ["google", "openai", "openaiResponses"],
+  imageGeneratorFast: ["google", "openai", "openaiResponses"],
   dalleGenerator: ["openai"],
   fluxGenerator: ["openai"],
   gptImageGenerator: ["openai"],

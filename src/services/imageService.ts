@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { ImageGenerationParams, ImageEditParams, GenerationResponse, ErrorDetails } from "@/types";
 import { useSettingsStore } from "@/stores/settingsStore";
+import { extractBase64ImageFromText, normalizeImageInput } from "@/services/imageDataUtils";
 
 // 图片节点类型
 type ImageNodeType = "imageGeneratorPro" | "imageGeneratorFast";
@@ -45,8 +46,28 @@ interface TauriGeminiResult {
   error?: string;
 }
 
+interface TauriOpenAIParams {
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+  prompt: string;
+  systemPrompt?: string;
+  temperature?: number;
+  maxTokens?: number;
+  files?: Array<{ data: string; mimeType: string; fileName?: string }>;
+}
+
+interface TauriOpenAIResult {
+  success: boolean;
+  content?: string;
+  error?: string;
+}
+
 // 通过 Tauri 后端代理发送请求
-async function invokeGemini(params: TauriGeminiParams, provider?: { name: string; protocol: string }): Promise<GenerationResponse> {
+async function invokeGemini(
+  params: TauriGeminiParams,
+  provider?: { name: string; protocol: string }
+): Promise<GenerationResponse> {
   console.log("[imageService] invokeGemini called, sending to Tauri backend...");
   console.log("[imageService] params:", { ...params, inputImages: params.inputImages?.length || 0, apiKey: "***" });
 
@@ -114,8 +135,10 @@ async function invokeGemini(params: TauriGeminiParams, provider?: { name: string
       };
     }
 
+    const fallbackImage = !result.imageData ? extractBase64ImageFromText(result.text) : undefined;
+
     return {
-      imageData: result.imageData,
+      imageData: result.imageData || fallbackImage || undefined,
       text: result.text,
     };
   } catch (error) {
@@ -140,6 +163,101 @@ async function invokeGemini(params: TauriGeminiParams, provider?: { name: string
   }
 }
 
+async function invokeOpenAIChat(
+  params: TauriOpenAIParams,
+  provider: { name: string; protocol: "openai" | "openaiResponses" }
+): Promise<GenerationResponse> {
+  const command = provider.protocol === "openai" ? "openai_chat_completion" : "openai_responses";
+
+  const fullRequestUrl =
+    provider.protocol === "openai"
+      ? `${params.baseUrl}/v1/chat/completions`
+      : `${params.baseUrl}/v1/responses`;
+
+  const requestBody = {
+    model: params.model,
+    prompt: params.prompt.slice(0, 500),
+    hasFiles: !!(params.files && params.files.length > 0),
+    filesCount: params.files?.length || 0,
+  };
+
+  try {
+    const startTime = Date.now();
+    const result = await invoke<TauriOpenAIResult>(command, { params });
+    const elapsed = Date.now() - startTime;
+
+    console.log("[imageService] OpenAI backend response received in", elapsed, "ms");
+
+    if (!result.success) {
+      const errorMessage = result.error || "请求失败";
+      const errorDetails: ErrorDetails = {
+        name: "API_Error",
+        message: errorMessage,
+        timestamp: new Date().toISOString(),
+        model: params.model,
+        provider: provider.name,
+        requestUrl: fullRequestUrl,
+        requestBody,
+      };
+
+      const statusCodeMatch = errorMessage.match(/\((\d{3})\)/);
+      if (statusCodeMatch) {
+        errorDetails.statusCode = parseInt(statusCodeMatch[1], 10);
+      }
+
+      return {
+        error: errorMessage,
+        errorDetails,
+      };
+    }
+
+    const imageData = extractBase64ImageFromText(result.content);
+
+    if (!imageData) {
+      return {
+        error: "API 返回成功但未包含图片数据",
+        text: result.content,
+        errorDetails: {
+          name: "EmptyImageData",
+          message: "API 返回成功但未包含图片数据",
+          timestamp: new Date().toISOString(),
+          model: params.model,
+          provider: provider.name,
+          requestUrl: fullRequestUrl,
+          responseBody: {
+            success: result.success,
+            hasContent: !!result.content,
+          },
+        },
+      };
+    }
+
+    return {
+      imageData,
+      text: result.content,
+    };
+  } catch (error) {
+    console.error("[imageService] OpenAI invoke error:", error);
+    const message = error instanceof Error ? error.message : String(error);
+
+    const errorDetails: ErrorDetails = {
+      name: error instanceof Error ? error.name : "Error",
+      message,
+      stack: error instanceof Error ? error.stack : undefined,
+      timestamp: new Date().toISOString(),
+      model: params.model,
+      provider: provider.name,
+      requestUrl: fullRequestUrl,
+      requestBody,
+    };
+
+    return {
+      error: message,
+      errorDetails,
+    };
+  }
+}
+
 // 文本生成图片
 export async function generateImage(
   params: ImageGenerationParams,
@@ -149,6 +267,18 @@ export async function generateImage(
   try {
     const provider = getProviderConfig(nodeType);
     const isPro = params.model === "gemini-3-pro-image-preview";
+
+    if (provider.protocol === "openai" || provider.protocol === "openaiResponses") {
+      return await invokeOpenAIChat(
+        {
+          baseUrl: provider.baseUrl.replace(/\/+$/, ""),
+          apiKey: provider.apiKey,
+          model: params.model,
+          prompt: params.prompt,
+        },
+        { name: provider.name, protocol: provider.protocol }
+      );
+    }
 
     return await invokeGemini(
       {
@@ -181,6 +311,29 @@ export async function editImage(
   try {
     const provider = getProviderConfig(nodeType);
     const isPro = params.model === "gemini-3-pro-image-preview";
+    const normalizedInputImages = params.inputImages?.map((image) => normalizeImageInput(image).base64);
+
+    if (provider.protocol === "openai" || provider.protocol === "openaiResponses") {
+      const files = params.inputImages?.map((image, index) => {
+        const normalized = normalizeImageInput(image);
+        return {
+          data: normalized.base64,
+          mimeType: normalized.mimeType,
+          fileName: `input-${index + 1}`,
+        };
+      });
+
+      return await invokeOpenAIChat(
+        {
+          baseUrl: provider.baseUrl.replace(/\/+$/, ""),
+          apiKey: provider.apiKey,
+          model: params.model,
+          prompt: params.prompt,
+          files,
+        },
+        { name: provider.name, protocol: provider.protocol }
+      );
+    }
 
     return await invokeGemini(
       {
@@ -188,7 +341,7 @@ export async function editImage(
         apiKey: provider.apiKey,
         model: params.model,
         prompt: params.prompt,
-        inputImages: params.inputImages,
+        inputImages: normalizedInputImages,
         aspectRatio: params.aspectRatio || "1:1",
         imageSize: isPro ? params.imageSize : undefined,
       },

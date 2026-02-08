@@ -14,6 +14,7 @@ import type {
   ImageGenerationCapability,
 } from "../types";
 import type { ErrorDetails } from "@/types";
+import { extractBase64ImageFromText, normalizeImageInput } from "@/services/imageDataUtils";
 
 // Tauri 后端响应类型
 interface TauriGeminiResult {
@@ -97,13 +98,16 @@ export class GeminiImageProvider implements ImageGenerationProvider {
    */
   buildTauriParams(request: ImageGenerationRequest, config: ProviderConfig) {
     const apiBaseUrl = config.baseUrl.replace(/\/+$/, "");
+    const normalizedInputImages = request.inputImages?.map(
+      (image) => normalizeImageInput(image).base64
+    );
 
     return {
       baseUrl: apiBaseUrl,
       apiKey: config.apiKey,
       model: request.model,
       prompt: request.prompt,
-      inputImages: request.inputImages,
+      inputImages: normalizedInputImages,
       aspectRatio: request.aspectRatio || "1:1",
       imageSize: request.imageSize,
     };
@@ -174,8 +178,10 @@ export class GeminiImageProvider implements ImageGenerationProvider {
       };
     }
 
+    const fallbackImage = !result.imageData ? extractBase64ImageFromText(result.text) : undefined;
+
     // 检查是否有图片数据
-    if (!result.imageData) {
+    if (!result.imageData && !fallbackImage) {
       return {
         error: "API 返回成功但未包含图片数据",
         text: result.text,
@@ -195,7 +201,7 @@ export class GeminiImageProvider implements ImageGenerationProvider {
     }
 
     return {
-      imageData: result.imageData,
+      imageData: result.imageData || fallbackImage,
       text: result.text,
       metadata: {
         model: request.model,
