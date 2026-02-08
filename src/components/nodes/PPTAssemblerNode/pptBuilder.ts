@@ -1,7 +1,5 @@
 import PptxGenJS from "pptxgenjs";
-import type { PPTPageData } from "./types";
-import type { ProcessedPage } from "@/services/ocrInpaintService";
-import { isTauriEnvironment } from "@/services/fileStorageService";
+import type { PPTPageData, ProcessedPage } from "./types";
 import { toast } from "@/stores/toastStore";
 
 export interface BuildPPTOptions {
@@ -81,39 +79,25 @@ export async function downloadPPT(options: BuildPPTOptions): Promise<void> {
   const blob = await buildPPT(options);
   const fileName = `${options.title || "PPT"}.pptx`;
 
-  if (isTauriEnvironment()) {
-    // Tauri 环境：使用保存对话框
-    try {
-      const { save } = await import("@tauri-apps/plugin-dialog");
-      const { writeFile } = await import("@tauri-apps/plugin-fs");
+  try {
+    const { save } = await import("@tauri-apps/plugin-dialog");
+    const { writeFile } = await import("@tauri-apps/plugin-fs");
 
-      const filePath = await save({
-        defaultPath: fileName,
-        filters: [{ name: "PowerPoint", extensions: ["pptx"] }],
-      });
+    const filePath = await save({
+      defaultPath: fileName,
+      filters: [{ name: "PowerPoint", extensions: ["pptx"] }],
+    });
 
-      if (filePath) {
-        const arrayBuffer = await blob.arrayBuffer();
-        const bytes = new Uint8Array(arrayBuffer);
-        await writeFile(filePath, bytes);
-        toast.success(`PPT 已保存到: ${filePath.split("/").pop()}`);
-      }
-    } catch (error) {
-      console.error("保存 PPT 失败:", error);
-      toast.error(`保存失败: ${error instanceof Error ? error.message : "未知错误"}`);
-      throw error;
+    if (filePath) {
+      const arrayBuffer = await blob.arrayBuffer();
+      const bytes = new Uint8Array(arrayBuffer);
+      await writeFile(filePath, bytes);
+      toast.success(`PPT 已保存到: ${filePath.split("/").pop()}`);
     }
-  } else {
-    // 浏览器环境：使用传统下载
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    toast.success("PPT 下载已开始");
+  } catch (error) {
+    console.error("保存 PPT 失败:", error);
+    toast.error(`保存失败: ${error instanceof Error ? error.message : "未知错误"}`);
+    throw error;
   }
 }
 
@@ -169,16 +153,17 @@ export async function buildEditablePPT(options: BuildEditablePPTOptions): Promis
     // 需要将像素坐标转换为幻灯片坐标
     // 假设原图尺寸与幻灯片比例一致
     if (page.textBoxes && page.textBoxes.length > 0) {
-      // 获取原图尺寸（从 base64 解析或使用默认值）
-      // 这里假设 16:9 为 1920x1080, 4:3 为 1920x1440
-      const imgWidth = aspectRatio === "16:9" ? 1920 : 1920;
-      const imgHeight = aspectRatio === "16:9" ? 1080 : 1440;
+      // 使用实际图片尺寸进行缩放，缺省则回退到常用尺寸
+      const imgWidth = page.sourceWidth || (aspectRatio === "16:9" ? 1920 : 1920);
+      const imgHeight = page.sourceHeight || (aspectRatio === "16:9" ? 1080 : 1440);
 
       // 计算缩放比例
       const scaleX = slideWidth / imgWidth;
       const scaleY = slideHeight / imgHeight;
 
       for (const box of page.textBoxes) {
+        if (!box.text || box.width <= 0 || box.height <= 0) continue;
+
         // 转换坐标
         const x = box.x * scaleX;
         const y = box.y * scaleY;
@@ -197,10 +182,11 @@ export async function buildEditablePPT(options: BuildEditablePPTOptions): Promis
           h,
           fontSize: Math.max(8, Math.min(fontSizePt, 72)), // 限制字号范围
           fontFace: "微软雅黑",
-          color: "000000",
-          valign: "middle",
+          color: (box.color || "333333").replace("#", ""),
+          bold: !!box.bold,
+          valign: "top",
           margin: 0,
-          wrap: false,
+          wrap: true,
         });
       }
     }
@@ -221,37 +207,25 @@ export async function downloadEditablePPT(options: BuildEditablePPTOptions): Pro
   const blob = await buildEditablePPT(options);
   const fileName = `${options.title || "PPT"}-可编辑.pptx`;
 
-  if (isTauriEnvironment()) {
-    try {
-      const { save } = await import("@tauri-apps/plugin-dialog");
-      const { writeFile } = await import("@tauri-apps/plugin-fs");
+  try {
+    const { save } = await import("@tauri-apps/plugin-dialog");
+    const { writeFile } = await import("@tauri-apps/plugin-fs");
 
-      const filePath = await save({
-        defaultPath: fileName,
-        filters: [{ name: "PowerPoint", extensions: ["pptx"] }],
-      });
+    const filePath = await save({
+      defaultPath: fileName,
+      filters: [{ name: "PowerPoint", extensions: ["pptx"] }],
+    });
 
-      if (filePath) {
-        const arrayBuffer = await blob.arrayBuffer();
-        const bytes = new Uint8Array(arrayBuffer);
-        await writeFile(filePath, bytes);
-        toast.success(`可编辑 PPT 已保存到: ${filePath.split("/").pop()}`);
-      }
-    } catch (error) {
-      console.error("保存可编辑 PPT 失败:", error);
-      toast.error(`保存失败: ${error instanceof Error ? error.message : "未知错误"}`);
-      throw error;
+    if (filePath) {
+      const arrayBuffer = await blob.arrayBuffer();
+      const bytes = new Uint8Array(arrayBuffer);
+      await writeFile(filePath, bytes);
+      toast.success(`可编辑 PPT 已保存到: ${filePath.split("/").pop()}`);
     }
-  } else {
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    toast.success("可编辑 PPT 下载已开始");
+  } catch (error) {
+    console.error("保存可编辑 PPT 失败:", error);
+    toast.error(`保存失败: ${error instanceof Error ? error.message : "未知错误"}`);
+    throw error;
   }
 }
 
@@ -319,37 +293,25 @@ export async function downloadBackgroundPPT(options: BuildEditablePPTOptions): P
   const blob = await buildBackgroundPPT(options);
   const fileName = `${options.title || "PPT"}-仅背景.pptx`;
 
-  if (isTauriEnvironment()) {
-    try {
-      const { save } = await import("@tauri-apps/plugin-dialog");
-      const { writeFile } = await import("@tauri-apps/plugin-fs");
+  try {
+    const { save } = await import("@tauri-apps/plugin-dialog");
+    const { writeFile } = await import("@tauri-apps/plugin-fs");
 
-      const filePath = await save({
-        defaultPath: fileName,
-        filters: [{ name: "PowerPoint", extensions: ["pptx"] }],
-      });
+    const filePath = await save({
+      defaultPath: fileName,
+      filters: [{ name: "PowerPoint", extensions: ["pptx"] }],
+    });
 
-      if (filePath) {
-        const arrayBuffer = await blob.arrayBuffer();
-        const bytes = new Uint8Array(arrayBuffer);
-        await writeFile(filePath, bytes);
-        toast.success(`仅背景 PPT 已保存到: ${filePath.split("/").pop()}`);
-      }
-    } catch (error) {
-      console.error("保存仅背景 PPT 失败:", error);
-      toast.error(`保存失败: ${error instanceof Error ? error.message : "未知错误"}`);
-      throw error;
+    if (filePath) {
+      const arrayBuffer = await blob.arrayBuffer();
+      const bytes = new Uint8Array(arrayBuffer);
+      await writeFile(filePath, bytes);
+      toast.success(`仅背景 PPT 已保存到: ${filePath.split("/").pop()}`);
     }
-  } else {
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    toast.success("仅背景 PPT 下载已开始");
+  } catch (error) {
+    console.error("保存仅背景 PPT 失败:", error);
+    toast.error(`保存失败: ${error instanceof Error ? error.message : "未知错误"}`);
+    throw error;
   }
 }
 
@@ -381,35 +343,23 @@ export async function downloadScripts(pages: PPTPageData[], title: string): Prom
   const fileName = `${title || "PPT"}-讲稿.md`;
   const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
 
-  if (isTauriEnvironment()) {
-    try {
-      const { save } = await import("@tauri-apps/plugin-dialog");
-      const { writeFile } = await import("@tauri-apps/plugin-fs");
+  try {
+    const { save } = await import("@tauri-apps/plugin-dialog");
+    const { writeFile } = await import("@tauri-apps/plugin-fs");
 
-      const filePath = await save({
-        defaultPath: fileName,
-        filters: [{ name: "Markdown", extensions: ["md", "txt"] }],
-      });
+    const filePath = await save({
+      defaultPath: fileName,
+      filters: [{ name: "Markdown", extensions: ["md", "txt"] }],
+    });
 
-      if (filePath) {
-        const arrayBuffer = await blob.arrayBuffer();
-        const bytes = new Uint8Array(arrayBuffer);
-        await writeFile(filePath, bytes);
-        toast.success(`讲稿已保存到: ${filePath.split("/").pop()}`);
-      }
-    } catch (error) {
-      console.error("保存讲稿失败:", error);
-      toast.error(`保存失败: ${error instanceof Error ? error.message : "未知错误"}`);
+    if (filePath) {
+      const arrayBuffer = await blob.arrayBuffer();
+      const bytes = new Uint8Array(arrayBuffer);
+      await writeFile(filePath, bytes);
+      toast.success(`讲稿已保存到: ${filePath.split("/").pop()}`);
     }
-  } else {
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    toast.success("讲稿下载已开始");
+  } catch (error) {
+    console.error("保存讲稿失败:", error);
+    toast.error(`保存失败: ${error instanceof Error ? error.message : "未知错误"}`);
   }
 }

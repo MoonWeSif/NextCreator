@@ -17,7 +17,6 @@ import {
 } from "lucide-react";
 import {
   getImageUrl,
-  isTauriEnvironment,
   readImage,
   formatFileSize,
   type ImageInfoWithMetadata,
@@ -81,33 +80,23 @@ export function ImageDetailModal({ imageInfo, onClose }: ImageDetailModalProps) 
       const base64Data = await readImage(imageInfo.path);
       const defaultFileName = imageInfo.filename || `next-creator-${Date.now()}.png`;
 
-      if (isTauriEnvironment()) {
-        const { save } = await import("@tauri-apps/plugin-dialog");
-        const { writeFile } = await import("@tauri-apps/plugin-fs");
+      const { save } = await import("@tauri-apps/plugin-dialog");
+      const { writeFile } = await import("@tauri-apps/plugin-fs");
 
-        const filePath = await save({
-          defaultPath: defaultFileName,
-          filters: [{ name: "图片", extensions: ["png", "jpg", "jpeg", "webp"] }],
-        });
+      const filePath = await save({
+        defaultPath: defaultFileName,
+        filters: [{ name: "图片", extensions: ["png", "jpg", "jpeg", "webp"] }],
+      });
 
-        if (filePath) {
-          const binaryString = atob(base64Data);
-          const bytes = new Uint8Array(binaryString.length);
-          for (let i = 0; i < binaryString.length; i++) {
-            bytes[i] = binaryString.charCodeAt(i);
-          }
-
-          await writeFile(filePath, bytes);
-          toast.success(`图片已保存到: ${filePath.split("/").pop()}`);
+      if (filePath) {
+        const binaryString = atob(base64Data);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
         }
-      } else {
-        const link = document.createElement("a");
-        link.href = `data:image/png;base64,${base64Data}`;
-        link.download = defaultFileName;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        toast.success("图片下载已开始");
+
+        await writeFile(filePath, bytes);
+        toast.success(`图片已保存到: ${filePath.split("/").pop()}`);
       }
     } catch (error) {
       console.error("下载失败:", error);

@@ -3,10 +3,9 @@
   <h1>NextCreator</h1>
   <p>基于可视化节点的 AI 内容生成工作流工具</p>
 
-  ![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)
+  ![Version](https://img.shields.io/badge/version-0.2.3-blue.svg)
   ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg)
   ![Tauri](https://img.shields.io/badge/Tauri-2.0-24C8DB.svg?logo=tauri&logoColor=white)
-  ![React](https://img.shields.io/badge/React-19-61DAFB.svg?logo=react&logoColor=white)
   ![License](https://img.shields.io/badge/license-AGPL%20v3-blue.svg)
 </div>
 
@@ -16,11 +15,11 @@
 
 - **节点编辑器** - 拖拽式工作流设计，支持撤销/重做、复制粘贴、自动布局
 - **多画布管理** - 创建多个独立画布，数据自动持久化
-- **AI 图片生成** - 支持 NanoBanana 文生图、图生图，可配置分辨率和比例
-- **AI 视频生成** - 基于 Sora 模型的视频生成
+- **AI 图片生成** - 支持 NanoBanana Z-Image Dall-e GPT-Image 豆包Image Flux文生图、图生图
+- **AI 视频生成** - 基于 Sora Veo Kling 模型的视频生成
 - **LLM 文本生成** - 支持多模态输入（文本/图片/PDF）
 - **PPT 工作流** - 自动生成大纲、PPT页面，导出可编辑文字的 PPTX
-- **Prompt 提示词库** - 内置大量绘图提示词，可拖拽至画布，快速使用，可添加自定义提示词。
+- **Prompt 提示词库** - 内置大量绘图提示词，可拖拽至画布，快速使用，可添加自定义提示词，收藏你喜欢的提示词
 - **工作流编排** - 支持工作流批量并行启动
 
 ## 截图预览
@@ -83,35 +82,6 @@ bun run tauri dev
 bun run tauri build
 ```
 
-## 可选：OCR + Inpaint 服务
-
-如需使用 **PPT 可编辑导出**功能（去除文字仅保留背景），需要 OCR 和 Inpaint 服务。
-
-### 方式一：使用公益服务
-
-项目提供公益服务，可直接在设置中配置使用：
-
-| 服务 | 地址 | 用途 |
-|------|------|------|
-| EasyOCR | http://152.67.202.21:8866 | 文字检测识别 |
-| IOPaint | http://152.67.202.21:8877 | AI 背景修复 |
-
-> ⚠️ **注意**：公益服务受限于服务器性能，处理速度较慢，且不保障可用性。建议本地部署以获得更好体验。
-
-### 方式二：本地部署（推荐）
-
-```bash
-cd docker
-docker-compose up -d
-```
-
-| 服务 | 地址 | 用途 |
-|------|------|------|
-| EasyOCR | http://127.0.0.1:8866 | 文字检测识别 |
-| IOPaint | http://127.0.0.1:8080 | AI 背景修复 |
-
-> 首次启动需下载模型，约 3-5 分钟
-
 ## 技术栈
 
 | 层级 | 技术 |
@@ -123,7 +93,7 @@ docker-compose up -d
 
 ## 致谢
 
-- [Nanobanana 提示词](https://github.com/ZeroLu/awesome-nanobanana-pro) - 本项目的内置提示词参照该仓库,感谢项目作者的整理与各个提示词的贡献者。
+- [awesome-nanobanana-pro](https://github.com/ZeroLu/awesome-nanobanana-pro) & [banana-prompt-quicker](https://github.com/glidea/banana-prompt-quicker) - 本项目的内置提示词参照两个仓库,感谢项目作者的整理与各个提示词的贡献者。
 
 ## 许可证
 

@@ -397,7 +397,13 @@ export function PageItemRow({
                             title={img.fileName || imageId}
                           >
                             <img
-                              src={`data:image/png;base64,${img.imageData}`}
+                              src={
+                                img.imagePath
+                                  ? getImageUrl(img.imagePath)
+                                  : img.imageData
+                                    ? `data:image/png;base64,${img.imageData}`
+                                    : undefined
+                              }
                               alt={img.fileName || "参考图片"}
                               className="w-full h-full object-cover"
                             />

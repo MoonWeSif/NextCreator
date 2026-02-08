@@ -1,6 +1,6 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { X, MessageSquare, Check } from "lucide-react";
+import { X, MessageSquare, Check, AlertTriangle } from "lucide-react";
 
 interface PromptEditorModalProps {
   initialValue: string;
@@ -20,8 +20,13 @@ export function PromptEditorModal({
   const [value, setValue] = useState(initialValue);
   const [isVisible, setIsVisible] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
+  // 确认对话框状态
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isComposingRef = useRef(false);
+
+  // 检测内容是否有变化
+  const hasChanges = useMemo(() => value !== initialValue, [value, initialValue]);
 
   // 进入动画
   useEffect(() => {
@@ -33,24 +38,58 @@ export function PromptEditorModal({
     }
   }, []);
 
-  // 关闭时先播放退出动画
-  const handleClose = useCallback(() => {
+  // 真正执行关闭（播放退出动画）
+  const doClose = useCallback(() => {
     setIsClosing(true);
     setIsVisible(false);
     setTimeout(onClose, 200);
   }, [onClose]);
 
+  // 尝试关闭 - 检查是否有未保存的更改
+  const handleClose = useCallback(() => {
+    if (hasChanges) {
+      // 有未保存的更改，显示确认对话框
+      setShowConfirmDialog(true);
+    } else {
+      // 没有更改，直接关闭
+      doClose();
+    }
+  }, [hasChanges, doClose]);
+
+  // 确认对话框：保存并关闭
+  const handleConfirmSave = useCallback(() => {
+    onSave(value);
+    setShowConfirmDialog(false);
+    doClose();
+  }, [value, onSave, doClose]);
+
+  // 确认对话框：不保存直接关闭
+  const handleConfirmDiscard = useCallback(() => {
+    setShowConfirmDialog(false);
+    doClose();
+  }, [doClose]);
+
+  // 确认对话框：取消（返回编辑）
+  const handleConfirmCancel = useCallback(() => {
+    setShowConfirmDialog(false);
+  }, []);
+
   // 保存并关闭
   const handleSave = useCallback(() => {
     onSave(value);
-    handleClose();
-  }, [value, onSave, handleClose]);
+    doClose();
+  }, [value, onSave, doClose]);
 
   // ESC 键关闭，Ctrl/Cmd + Enter 保存
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        handleClose();
+        if (showConfirmDialog) {
+          // 确认对话框打开时，ESC 关闭确认对话框
+          setShowConfirmDialog(false);
+        } else {
+          handleClose();
+        }
       } else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
         handleSave();
@@ -58,7 +97,7 @@ export function PromptEditorModal({
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [handleClose, handleSave]);
+  }, [handleClose, handleSave, showConfirmDialog]);
 
   return createPortal(
     <div
@@ -128,6 +167,53 @@ export function PromptEditorModal({
           </div>
         </div>
       </div>
+
+      {/* 未保存确认对话框 */}
+      {showConfirmDialog && (
+        <div
+          className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/40"
+          onClick={handleConfirmCancel}
+        >
+          <div
+            className="w-full max-w-sm bg-base-100 rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* 警告头部 */}
+            <div className="flex items-center gap-3 px-4 py-3 bg-warning/10 border-b border-warning/20">
+              <div className="p-2 bg-warning/20 rounded-full">
+                <AlertTriangle className="w-5 h-5 text-warning" />
+              </div>
+              <div>
+                <h3 className="font-medium text-base-content">未保存的更改</h3>
+                <p className="text-xs text-base-content/60">您有尚未保存的内容</p>
+              </div>
+            </div>
+
+            {/* 选项按钮 */}
+            <div className="p-4 space-y-2">
+              <button
+                className="btn btn-primary btn-sm w-full gap-2"
+                onClick={handleConfirmSave}
+              >
+                <Check className="w-4 h-4" />
+                保存更改
+              </button>
+              <button
+                className="btn btn-ghost btn-sm w-full text-error hover:bg-error/10"
+                onClick={handleConfirmDiscard}
+              >
+                不保存，直接关闭
+              </button>
+              <button
+                className="btn btn-ghost btn-sm w-full"
+                onClick={handleConfirmCancel}
+              >
+                取消，继续编辑
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>,
     document.body
   );

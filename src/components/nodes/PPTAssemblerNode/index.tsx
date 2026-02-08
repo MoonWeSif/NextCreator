@@ -22,23 +22,21 @@ import {
   Square,
   Layers,
   Settings,
-  ScanText,
-  Paintbrush,
   RotateCcw,
 } from "lucide-react";
 import { useFlowStore } from "@/stores/flowStore";
+import { useSettingsStore } from "@/stores/settingsStore";
 import type { PPTAssemblerNodeData, PPTPageData } from "./types";
-import { downloadPPT, downloadScripts, downloadBackgroundPPT } from "./pptBuilder";
+import { downloadPPT, downloadScripts, downloadEditablePPT } from "./pptBuilder";
 import { useLoadingDots } from "@/hooks/useLoadingDots";
 import type { PPTContentNodeData } from "../PPTContentNode/types";
 import { ImagePreviewModal } from "@/components/ui/ImagePreviewModal";
 import { ErrorDetailModal } from "@/components/ui/ErrorDetailModal";
 import {
-  processPageForEditable,
-  testOcrConnection,
-  testInpaintConnection,
-  checkServicesAvailable,
-} from "@/services/ocrInpaintService";
+  processPagesBatch,
+  stopBatchProcessing,
+  type PageProgressEvent,
+} from "@/services/textRemovalService";
 import { generateThumbnail } from "@/utils/imageCompression";
 
 // 定义节点类型
@@ -47,7 +45,7 @@ type PPTAssemblerNode = Node<PPTAssemblerNodeData>;
 // 导出模式选项
 const exportModeOptions = [
   { value: "image", label: "纯图片", icon: ImageIcon, desc: "每页为完整图片" },
-  { value: "background", label: "仅背景", icon: Eraser, desc: "去除文字，保留背景" },
+  { value: "background", label: "可编辑", icon: Eraser, desc: "背景 + 文本框，可编辑" },
 ];
 
 // 标签页类型
@@ -56,6 +54,20 @@ type TabType = "preview" | "config" | "background";
 // PPT 组装节点
 export const PPTAssemblerNode = memo(({ id, data, selected }: NodeProps<PPTAssemblerNode>) => {
   const { nodes, edges, updateNodeData } = useFlowStore();
+  const { settings } = useSettingsStore();
+
+  // 获取 LLM 供应商配置（用于文字检测）
+  const getLLMProvider = useCallback(() => {
+    const providerId = settings.nodeProviders.llm;
+    if (!providerId) return null;
+    const provider = settings.providers.find(p => p.id === providerId);
+    if (!provider) return null;
+    // 只支持 Google 协议
+    if (provider.protocol !== 'google') return null;
+    return provider;
+  }, [settings]);
+
+  const llmProvider = getLLMProvider();
 
   // 省略号加载动画
   const dots = useLoadingDots(data.status === "generating" || data.status === "processing");
@@ -75,20 +87,33 @@ export const PPTAssemblerNode = memo(({ id, data, selected }: NodeProps<PPTAssem
   // 预览模式：原图 vs 处理后
   const [previewMode, setPreviewMode] = useState<"original" | "processed">("original");
 
-  // 服务测试状态
-  const [ocrTestStatus, setOcrTestStatus] = useState<"idle" | "testing" | "success" | "error">("idle");
-  const [inpaintTestStatus, setInpaintTestStatus] = useState<"idle" | "testing" | "success" | "error">("idle");
-  const [ocrTestMessage, setOcrTestMessage] = useState("");
-  const [inpaintTestMessage, setInpaintTestMessage] = useState("");
-
   // 错误详情弹窗
   const [showErrorDetail, setShowErrorDetail] = useState(false);
 
   // 处理控制
-  const isProcessingRef = useRef(false);
+  const activeBatchCountRef = useRef(0);
   const stopRequestedRef = useRef(false);
-  // 用于硬停止的 AbortController
-  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const isPageProcessed = useCallback((page: PPTPageData) => {
+    return (
+      page.processStatus === "completed" &&
+      !!page.processedBackground &&
+      page.processedTextBoxes !== undefined
+    );
+  }, []);
+
+  const resetPageForProcessing = useCallback((page: PPTPageData): PPTPageData => {
+    return {
+      ...page,
+      processStatus: "detecting",
+      processError: undefined,
+      processedBackground: undefined,
+      processedThumbnail: undefined,
+      processedTextBoxes: undefined,
+      processedWidth: undefined,
+      processedHeight: undefined,
+    };
+  }, []);
 
   // 处理配置面板的打开/关闭动画
   const openPanel = useCallback(() => {
@@ -134,6 +159,9 @@ export const PPTAssemblerNode = memo(({ id, data, selected }: NodeProps<PPTAssem
         processStatus: undefined,
         processedBackground: undefined,
         processedThumbnail: undefined,
+        processedTextBoxes: undefined,
+        processedWidth: undefined,
+        processedHeight: undefined,
         processError: undefined,
       }));
 
@@ -178,261 +206,279 @@ export const PPTAssemblerNode = memo(({ id, data, selected }: NodeProps<PPTAssem
     return "PPT 演示文稿";
   }, [id, nodes, edges]);
 
-  // 测试 OCR 服务
-  const handleTestOcr = useCallback(async () => {
-    setOcrTestStatus("testing");
-    setOcrTestMessage("");
-    try {
-      const result = await testOcrConnection(data.ocrApiUrl);
-      setOcrTestStatus(result.success ? "success" : "error");
-      setOcrTestMessage(result.message);
-    } catch (error) {
-      setOcrTestStatus("error");
-      setOcrTestMessage(error instanceof Error ? error.message : "测试失败");
-    }
-  }, [data.ocrApiUrl]);
+  // 批量处理清理函数引用
+  const batchCleanupRef = useRef<(() => void) | null>(null);
 
-  // 测试 IOPaint 服务
-  const handleTestInpaint = useCallback(async () => {
-    setInpaintTestStatus("testing");
-    setInpaintTestMessage("");
-    try {
-      const result = await testInpaintConnection(data.inpaintApiUrl);
-      setInpaintTestStatus(result.success ? "success" : "error");
-      setInpaintTestMessage(result.message);
-    } catch (error) {
-      setInpaintTestStatus("error");
-      setInpaintTestMessage(error instanceof Error ? error.message : "测试失败");
-    }
-  }, [data.inpaintApiUrl]);
-
-  // 开始背景处理
-  const handleStartProcessing = useCallback(async () => {
-    if (isProcessingRef.current) return;
-
-    isProcessingRef.current = true;
-    stopRequestedRef.current = false;
-
-    // 创建新的 AbortController
-    const abortController = new AbortController();
-    abortControllerRef.current = abortController;
-
-    // 检查服务可用性
-    const servicesCheck = await checkServicesAvailable({
-      ocrApiUrl: data.ocrApiUrl,
-      inpaintApiUrl: data.inpaintApiUrl,
-    });
-
-    // 检查是否在服务检查期间被停止
-    if (abortController.signal.aborted) {
-      isProcessingRef.current = false;
-      return;
-    }
-
-    if (!servicesCheck.ocrAvailable) {
-      updateNodeData<PPTAssemblerNodeData>(id, {
-        status: "error",
-        error: `OCR 服务连接失败: ${servicesCheck.ocrMessage}`,
-      });
-      isProcessingRef.current = false;
-      abortControllerRef.current = null;
-      return;
-    }
-
-    if (!servicesCheck.inpaintAvailable) {
-      updateNodeData<PPTAssemblerNodeData>(id, {
-        status: "error",
-        error: `IOPaint 服务连接失败: ${servicesCheck.inpaintMessage}`,
-      });
-      isProcessingRef.current = false;
-      abortControllerRef.current = null;
-      return;
-    }
-
-    // 获取最新数据的辅助函数
+  // 处理页面进度事件
+  // 注意：这个回调会被 Tauri 事件系统调用，不能是 async 函数，否则会导致状态更新顺序错乱
+  const handlePageProgress = useCallback((event: PageProgressEvent) => {
     const getLatestPages = (): PPTPageData[] => {
       const node = useFlowStore.getState().nodes.find(n => n.id === id);
       return (node?.data as PPTAssemblerNodeData)?.pages || [];
     };
 
-    // 初始化所有页面状态为 pending
-    const initialPages = data.pages.map(p => ({
-      ...p,
-      processStatus: (p.processStatus === 'completed' && p.processedBackground) ? 'completed' as const : 'pending' as const,
-      processError: undefined,
-    }));
+    const latestPages = getLatestPages();
+    const { pageIndex, status, error, backgroundImage, textBoxes, imageWidth, imageHeight } = event;
+
+    if (stopRequestedRef.current) {
+      return;
+    }
+
+    // 立即同步更新状态，确保状态更新顺序正确
+    const updatedPages = latestPages.map((p, idx) =>
+      idx === pageIndex ? (() => {
+        const nextPage = {
+          ...p,
+          processStatus: status,
+          processError: error,
+        };
+
+        if (status === "completed") {
+          return {
+            ...nextPage,
+            processedBackground: backgroundImage || p.processedBackground,
+            processedTextBoxes: textBoxes ?? p.processedTextBoxes,
+            processedWidth: imageWidth ?? p.processedWidth,
+            processedHeight: imageHeight ?? p.processedHeight,
+          };
+        }
+
+        if (status === "detecting" || status === "inpainting") {
+          return {
+            ...nextPage,
+            processError: undefined,
+          };
+        }
+
+        return nextPage;
+      })() : p
+    );
+
+    const latestNode = useFlowStore.getState().nodes.find(n => n.id === id);
+    const currentProgress = (latestNode?.data as PPTAssemblerNodeData | undefined)?.processingProgress;
+    const completedCount = updatedPages.filter(isPageProcessed).length;
+    const nextProgress = currentProgress
+      ? {
+        ...currentProgress,
+        current: completedCount,
+        currentStep: status === "detecting" || status === "inpainting" ? status : currentProgress.currentStep,
+      }
+      : currentProgress;
+
+    const isAnyProcessing = updatedPages.some(
+      p => p.processStatus === "detecting" || p.processStatus === "inpainting"
+    );
+    const fallbackStep = status === "detecting" || status === "inpainting" ? status : undefined;
+    const nextProgressState = isAnyProcessing
+      ? (nextProgress || { current: completedCount, total: updatedPages.length, currentStep: fallbackStep })
+      : null;
+
+    updateNodeData<PPTAssemblerNodeData>(id, {
+      pages: updatedPages,
+      processingProgress: nextProgressState,
+    });
+
+    // 如果当前页面完成，自动切换到处理后预览
+    if (status === 'completed' && pageIndex === currentPage) {
+      setPreviewMode("processed");
+    }
+
+    // 异步生成缩略图（不阻塞状态更新）
+    if (backgroundImage) {
+      generateThumbnail(backgroundImage, {
+        maxWidth: 400,
+        quality: 0.7,
+      }).then((thumbnail) => {
+        // 再次获取最新状态并更新缩略图
+        const currentPages = getLatestPages();
+        const pagesWithThumbnail = currentPages.map((p, idx) =>
+          idx === pageIndex ? { ...p, processedThumbnail: thumbnail } : p
+        );
+        updateNodeData<PPTAssemblerNodeData>(id, { pages: pagesWithThumbnail });
+      }).catch((e) => {
+        console.error("生成缩略图失败:", e);
+      });
+    }
+  }, [id, updateNodeData, currentPage, isPageProcessed]);
+
+  const runProcessing = useCallback(async (targetIndices: number[]) => {
+    if (targetIndices.length === 0) {
+      return;
+    }
+
+    const provider = getLLMProvider();
+    if (!provider) {
+      updateNodeData<PPTAssemblerNodeData>(id, {
+        status: "error",
+        error: "请在供应商管理中配置 LLM 供应商（需使用 Google 协议）",
+      });
+      return;
+    }
+
+    const getLatestPages = (): PPTPageData[] => {
+      const node = useFlowStore.getState().nodes.find(n => n.id === id);
+      return (node?.data as PPTAssemblerNodeData)?.pages || [];
+    };
+
+    const latestPages = getLatestPages();
+    const targetSet = new Set(targetIndices);
+    const pagesToProcess = latestPages
+      .map((p, idx) => ({ page: p, index: idx }))
+      .filter(({ page, index }) => targetSet.has(index) && !isPageProcessed(page));
+
+    const missingImageIndices = pagesToProcess
+      .filter(({ page }) => !page.image)
+      .map(({ index }) => index);
+
+    if (missingImageIndices.length > 0) {
+      const nextPages = latestPages.map((p, idx) =>
+        missingImageIndices.includes(idx)
+          ? { ...p, processStatus: "error" as const, processError: "缺少页面图片，无法处理" }
+          : p
+      );
+      updateNodeData<PPTAssemblerNodeData>(id, { pages: nextPages });
+    }
+
+    const validPagesToProcess = pagesToProcess.filter(({ page }) => !!page.image);
+    if (validPagesToProcess.length === 0) {
+      return;
+    }
+
+    activeBatchCountRef.current += 1;
+    stopRequestedRef.current = false;
+    const validTargetSet = new Set(validPagesToProcess.map(item => item.index));
+
+    const initialPages = latestPages.map((p, idx) => (
+      validTargetSet.has(idx) ? resetPageForProcessing(p) : p
+    ));
 
     updateNodeData<PPTAssemblerNodeData>(id, {
       status: "processing",
       error: undefined,
       pages: initialPages,
-      processingProgress: { current: 0, total: data.pages.length, currentStep: 'ocr' },
+      processingProgress: { current: initialPages.filter(isPageProcessed).length, total: initialPages.length, currentStep: "detecting" },
     });
+
+    const batchInput = validPagesToProcess.map(({ page, index }) => ({
+      pageIndex: index,
+      imageData: page.image,
+    }));
 
     const config = {
-      ocrApiUrl: data.ocrApiUrl,
-      inpaintApiUrl: data.inpaintApiUrl,
+      geminiBaseUrl: provider.baseUrl,
+      geminiApiKey: provider.apiKey,
+      geminiModel: "gemini-3-flash-preview",
     };
 
-    const totalPages = data.pages.length;
-
-    // 逐页处理
-    for (let i = 0; i < totalPages; i++) {
-      // 检查是否被中断（硬停止）
-      if (abortController.signal.aborted || stopRequestedRef.current) {
-        // 用户请求停止 - 重置所有 processing 状态的页面为 pending
-        const latestPages = getLatestPages();
-        const resetPages = latestPages.map(p =>
-          p.processStatus === 'processing'
-            ? { ...p, processStatus: 'pending' as const, processError: undefined }
-            : p
-        );
-
-        updateNodeData<PPTAssemblerNodeData>(id, {
-          status: "idle",
-          pages: resetPages,
-          processingProgress: null,
-        });
-        isProcessingRef.current = false;
-        abortControllerRef.current = null;
-        return;
-      }
-
-      // 获取最新的页面数据
-      const latestPages = getLatestPages();
-      const page = latestPages[i];
-
-      if (!page) continue;
-
-      // 如果已经处理过，跳过
-      if (page.processStatus === 'completed' && page.processedBackground) {
-        continue;
-      }
-
-      // 更新当前页面为处理中
-      const updatedPagesProcessing = latestPages.map((p, idx) =>
-        idx === i ? { ...p, processStatus: 'processing' as const } : p
-      );
-      updateNodeData<PPTAssemblerNodeData>(id, {
-        pages: updatedPagesProcessing,
-        processingProgress: { current: i + 1, total: totalPages, currentStep: 'ocr' },
-      });
-
-      try {
-        // 再次检查是否被中断
-        if (abortController.signal.aborted || stopRequestedRef.current) {
-          throw new Error("已停止");
-        }
-
-        // 调用处理服务
-        const result = await processPageForEditable(page.image, config);
-
-        // 处理完成后再检查一次是否被中断
-        if (abortController.signal.aborted || stopRequestedRef.current) {
-          throw new Error("已停止");
-        }
-
-        // 生成缩略图
-        const processedThumbnail = await generateThumbnail(result.backgroundImage, {
-          maxWidth: 400,
-          quality: 0.7,
-        });
-
-        // 获取最新数据并更新
-        const currentPages = getLatestPages();
-        const updatedPages = currentPages.map((p, idx) =>
-          idx === i ? {
-            ...p,
-            processStatus: 'completed' as const,
-            processedBackground: result.backgroundImage,
-            processedThumbnail,
-            processError: undefined,
-          } : p
-        );
-
-        updateNodeData<PPTAssemblerNodeData>(id, {
-          pages: updatedPages,
-        });
-
-        // 自动切换到处理后预览
-        if (i === currentPage) {
-          setPreviewMode("processed");
-        }
-
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : "处理失败";
-
-        // 如果是停止导致的错误，重置为 pending 状态
-        if (errorMessage === "已停止" || abortController.signal.aborted || stopRequestedRef.current) {
-          const currentPages = getLatestPages();
-          const resetPages = currentPages.map(p =>
-            p.processStatus === 'processing'
-              ? { ...p, processStatus: 'pending' as const, processError: undefined }
-              : p
+    try {
+      const { cleanup, result } = await processPagesBatch(
+        batchInput,
+        config,
+        handlePageProgress,
+        () => {
+          activeBatchCountRef.current = Math.max(0, activeBatchCountRef.current - 1);
+          const latestAfter = getLatestPages();
+          const hasError = latestAfter.some(p => p.processStatus === "error");
+          const hasProcessing = latestAfter.some(
+            p => p.processStatus === "detecting" || p.processStatus === "inpainting"
           );
-
           updateNodeData<PPTAssemblerNodeData>(id, {
-            pages: resetPages,
-            status: "idle",
+            status: hasProcessing ? "processing" : hasError ? "error" : "ready",
+            error: hasError ? "部分页面处理失败" : undefined,
             processingProgress: null,
           });
-
-          isProcessingRef.current = false;
-          abortControllerRef.current = null;
-          return;
         }
+      );
 
-        // 获取最新数据并更新为错误状态
-        const currentPages = getLatestPages();
-        const updatedPages = currentPages.map((p, idx) =>
-          idx === i ? {
-            ...p,
-            processStatus: 'error' as const,
-            processError: errorMessage,
-          } : p
-        );
+      batchCleanupRef.current = cleanup;
+      await result;
+    } catch (error) {
+      console.error("批量处理失败:", error);
+      activeBatchCountRef.current = Math.max(0, activeBatchCountRef.current - 1);
+      updateNodeData<PPTAssemblerNodeData>(id, {
+        status: "error",
+        error: error instanceof Error ? error.message : "批量处理失败",
+        processingProgress: null,
+      });
+    } finally {
+      batchCleanupRef.current = null;
+    }
+  }, [getLLMProvider, handlePageProgress, id, isPageProcessed, resetPageForProcessing, updateNodeData]);
 
-        updateNodeData<PPTAssemblerNodeData>(id, {
-          pages: updatedPages,
-          status: "error",
-          error: `第 ${page.pageNumber} 页处理失败: ${errorMessage}`,
-        });
+  // 开始可编辑处理 - 后端批量处理
+  const handleStartProcessing = useCallback(async () => {
+    const getLatestPages = (): PPTPageData[] => {
+      const node = useFlowStore.getState().nodes.find(n => n.id === id);
+      return (node?.data as PPTAssemblerNodeData)?.pages || [];
+    };
 
-        isProcessingRef.current = false;
-        abortControllerRef.current = null;
-        return;
-      }
+    const latestPages = getLatestPages();
+    const indices = latestPages
+      .map((p, idx) => ({ p, idx }))
+      .filter(({ p }) => !isPageProcessed(p))
+      .map(({ idx }) => idx);
+
+    await runProcessing(indices);
+  }, [id, isPageProcessed, runProcessing]);
+
+  // 处理单个页面（点击单独开始按钮）- 使用后端批量处理
+  const handleProcessSinglePage = useCallback(async (pageIndex: number) => {
+    const getLatestPages = (): PPTPageData[] => {
+      const node = useFlowStore.getState().nodes.find(n => n.id === id);
+      return (node?.data as PPTAssemblerNodeData)?.pages || [];
+    };
+
+    const latestPages = getLatestPages();
+    const page = latestPages[pageIndex];
+    if (!page) return;
+
+    if (!page.image) {
+      updateNodeData<PPTAssemblerNodeData>(id, {
+        error: "缺少页面图片，无法处理",
+      });
+      return;
     }
 
-    // 处理完成
-    updateNodeData<PPTAssemblerNodeData>(id, {
-      status: "ready",
-      processingProgress: null,
-    });
+    if (page.processStatus === "detecting" || page.processStatus === "inpainting") {
+      return;
+    }
 
-    isProcessingRef.current = false;
-    abortControllerRef.current = null;
-  }, [id, data.pages, data.ocrApiUrl, data.inpaintApiUrl, updateNodeData, currentPage]);
+    // 处理中时允许加入队列，避免阻塞其它重试
+    // 非处理中：先重置页面，再触发处理，确保已完成页面也能重新处理
+    const resetPages = latestPages.map((p, idx) =>
+      idx === pageIndex ? resetPageForProcessing(p) : p
+    );
+    updateNodeData<PPTAssemblerNodeData>(id, { pages: resetPages, error: undefined });
 
-  // 停止处理 - 硬停止：立即中断，重置所有正在处理的页面状态
-  const handleStopProcessing = useCallback(() => {
+    await runProcessing([pageIndex]);
+  }, [id, resetPageForProcessing, runProcessing, updateNodeData]);
+
+  // 停止处理 - 调用后端停止命令
+  const handleStopProcessing = useCallback(async () => {
     // 设置停止标志
     stopRequestedRef.current = true;
+    activeBatchCountRef.current = 0;
 
-    // 中断 AbortController（虽然 Tauri invoke 不支持中断，但可以用于后续检查）
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
+    // 清理事件监听器
+    if (batchCleanupRef.current) {
+      batchCleanupRef.current();
+      batchCleanupRef.current = null;
     }
 
-    // 硬停止：立即重置所有 processing 状态的页面为 pending，并更新 UI
+    // 调用后端停止命令
+    try {
+      await stopBatchProcessing();
+    } catch (error) {
+      console.error("停止处理失败:", error);
+    }
+
+    // 重置所有进行中的页面为 pending
     const node = useFlowStore.getState().nodes.find(n => n.id === id);
     const currentData = node?.data as PPTAssemblerNodeData | undefined;
     const currentPages = currentData?.pages || [];
 
-    // 重置所有 processing 的页面为 pending
     const resetPages = currentPages.map(p =>
-      p.processStatus === 'processing'
+      (p.processStatus === 'detecting' || p.processStatus === 'inpainting')
         ? { ...p, processStatus: 'pending' as const, processError: undefined }
         : p
     );
@@ -446,97 +492,9 @@ export const PPTAssemblerNode = memo(({ id, data, selected }: NodeProps<PPTAssem
     });
 
     // 重置处理标志
-    isProcessingRef.current = false;
+    activeBatchCountRef.current = 0;
   }, [id, updateNodeData]);
 
-  // 单页重试
-  const handleRetryPage = useCallback(async (pageIndex: number) => {
-    if (isProcessingRef.current) return;
-
-    const page = data.pages[pageIndex];
-    if (!page) return;
-
-    isProcessingRef.current = true;
-
-    // 获取最新数据的辅助函数
-    const getLatestPages = (): PPTPageData[] => {
-      const node = useFlowStore.getState().nodes.find(n => n.id === id);
-      return (node?.data as PPTAssemblerNodeData)?.pages || [];
-    };
-
-    // 更新当前页面为处理中
-    const latestPages = getLatestPages();
-    const updatedPagesProcessing = latestPages.map((p, idx) =>
-      idx === pageIndex ? { ...p, processStatus: 'processing' as const, processError: undefined } : p
-    );
-    updateNodeData<PPTAssemblerNodeData>(id, {
-      pages: updatedPagesProcessing,
-      status: "processing",
-      error: undefined,
-      processingProgress: { current: pageIndex + 1, total: data.pages.length, currentStep: 'ocr' },
-    });
-
-    const config = {
-      ocrApiUrl: data.ocrApiUrl,
-      inpaintApiUrl: data.inpaintApiUrl,
-    };
-
-    try {
-      // 调用处理服务
-      const result = await processPageForEditable(page.image, config);
-
-      // 生成缩略图
-      const processedThumbnail = await generateThumbnail(result.backgroundImage, {
-        maxWidth: 400,
-        quality: 0.7,
-      });
-
-      // 获取最新数据并更新
-      const currentPages = getLatestPages();
-      const updatedPages = currentPages.map((p, idx) =>
-        idx === pageIndex ? {
-          ...p,
-          processStatus: 'completed' as const,
-          processedBackground: result.backgroundImage,
-          processedThumbnail,
-          processError: undefined,
-        } : p
-      );
-
-      updateNodeData<PPTAssemblerNodeData>(id, {
-        pages: updatedPages,
-        status: "idle",
-        processingProgress: null,
-      });
-
-      // 自动切换到处理后预览
-      if (pageIndex === currentPage) {
-        setPreviewMode("processed");
-      }
-
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "处理失败";
-
-      // 获取最新数据并更新为错误状态
-      const currentPages = getLatestPages();
-      const updatedPages = currentPages.map((p, idx) =>
-        idx === pageIndex ? {
-          ...p,
-          processStatus: 'error' as const,
-          processError: errorMessage,
-        } : p
-      );
-
-      updateNodeData<PPTAssemblerNodeData>(id, {
-        pages: updatedPages,
-        status: "idle",
-        error: `第 ${page.pageNumber} 页处理失败: ${errorMessage}`,
-        processingProgress: null,
-      });
-    }
-
-    isProcessingRef.current = false;
-  }, [id, data.pages, data.ocrApiUrl, data.inpaintApiUrl, updateNodeData, currentPage]);
 
   // 下载 PPT（纯图片模式）
   const handleDownloadImagePPT = useCallback(async () => {
@@ -553,7 +511,7 @@ export const PPTAssemblerNode = memo(({ id, data, selected }: NodeProps<PPTAssem
       await downloadPPT({
         title,
         pages: data.pages,
-        aspectRatio: "16:9",
+        aspectRatio: data.aspectRatio,
       });
 
       updateNodeData<PPTAssemblerNodeData>(id, {
@@ -563,18 +521,20 @@ export const PPTAssemblerNode = memo(({ id, data, selected }: NodeProps<PPTAssem
       updateNodeData<PPTAssemblerNodeData>(id, {
         status: "error",
         error: error instanceof Error ? error.message : "导出失败",
+        errorDetails: undefined,
       });
     }
-  }, [id, data.pages, getPPTTitle, updateNodeData]);
+  }, [id, data.pages, data.aspectRatio, getPPTTitle, updateNodeData, isPageProcessed]);
 
-  // 下载 PPT（仅背景模式）
-  const handleDownloadBackgroundPPT = useCallback(async () => {
+  // 下载 PPT（可编辑模式）
+  const handleDownloadEditablePPT = useCallback(async () => {
     // 检查是否所有页面都已处理
-    const allProcessed = data.pages.every(p => p.processStatus === 'completed' && p.processedBackground);
+    const allProcessed = data.pages.every(isPageProcessed);
     if (!allProcessed) {
       updateNodeData<PPTAssemblerNodeData>(id, {
         status: "error",
-        error: "请先完成所有页面的背景处理",
+        error: "请先完成所有页面的可编辑处理",
+        errorDetails: undefined,
       });
       return;
     }
@@ -590,14 +550,16 @@ export const PPTAssemblerNode = memo(({ id, data, selected }: NodeProps<PPTAssem
       // 构建处理后的页面数据
       const processedPages = data.pages.map(p => ({
         backgroundImage: p.processedBackground!,
-        textBoxes: [],
+        textBoxes: p.processedTextBoxes || [],
+        sourceWidth: p.processedWidth,
+        sourceHeight: p.processedHeight,
         originalPage: p,
       }));
 
-      await downloadBackgroundPPT({
+      await downloadEditablePPT({
         title,
         pages: processedPages,
-        aspectRatio: "16:9",
+        aspectRatio: data.aspectRatio,
       });
 
       updateNodeData<PPTAssemblerNodeData>(id, {
@@ -607,18 +569,19 @@ export const PPTAssemblerNode = memo(({ id, data, selected }: NodeProps<PPTAssem
       updateNodeData<PPTAssemblerNodeData>(id, {
         status: "error",
         error: error instanceof Error ? error.message : "导出失败",
+        errorDetails: undefined,
       });
     }
-  }, [id, data.pages, getPPTTitle, updateNodeData]);
+  }, [id, data.pages, data.aspectRatio, getPPTTitle, updateNodeData]);
 
   // 下载 PPT（根据模式）
   const handleDownloadPPT = useCallback(() => {
     if (data.exportMode === "image") {
       handleDownloadImagePPT();
     } else {
-      handleDownloadBackgroundPPT();
+      handleDownloadEditablePPT();
     }
-  }, [data.exportMode, handleDownloadImagePPT, handleDownloadBackgroundPPT]);
+  }, [data.exportMode, handleDownloadImagePPT, handleDownloadEditablePPT]);
 
   // 下载讲稿
   const handleDownloadScripts = useCallback(async () => {
@@ -634,14 +597,14 @@ export const PPTAssemblerNode = memo(({ id, data, selected }: NodeProps<PPTAssem
   const isProcessing = data.status === "processing" || data.status === "generating";
 
   // 计算处理进度统计
-  const processedCount = data.pages.filter(p => p.processStatus === 'completed').length;
+  const processedCount = data.pages.filter(isPageProcessed).length;
   const errorCount = data.pages.filter(p => p.processStatus === 'error').length;
   const pendingCount = data.pages.filter(p => !p.processStatus || p.processStatus === 'pending').length;
 
-  // 检查是否可以下载（仅背景模式需要先处理）
+  // 检查是否可以下载（可编辑模式需要先处理）
   const canDownload = data.exportMode === "image"
     ? data.pages.length > 0
-    : data.pages.every(p => p.processStatus === 'completed' && p.processedBackground);
+    : data.pages.every(isPageProcessed);
 
   return (
     <>
@@ -713,7 +676,7 @@ export const PPTAssemblerNode = memo(({ id, data, selected }: NodeProps<PPTAssem
           <div className="flex items-center justify-between text-xs">
             <span className="text-base-content/60">导出模式</span>
             <span className={`font-medium ${data.exportMode === 'background' ? 'text-secondary' : 'text-primary'}`}>
-              {data.exportMode === 'image' ? '纯图片' : '仅背景'}
+              {data.exportMode === 'image' ? '纯图片' : '可编辑'}
             </span>
           </div>
 
@@ -722,11 +685,8 @@ export const PPTAssemblerNode = memo(({ id, data, selected }: NodeProps<PPTAssem
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-base-content/60 flex items-center gap-1">
-                  {data.processingProgress.currentStep === 'ocr' ? (
-                    <><ScanText className="w-3 h-3" />识别文字</>
-                  ) : (
-                    <><Paintbrush className="w-3 h-3" />修复背景</>
-                  )}
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  并发处理中
                 </span>
                 <span className="text-primary font-medium">
                   {data.processingProgress.current}/{data.processingProgress.total}
@@ -866,7 +826,7 @@ export const PPTAssemblerNode = memo(({ id, data, selected }: NodeProps<PPTAssem
                   onClick={() => setActiveTab('background')}
                 >
                   <Layers className="w-4 h-4 inline mr-1.5" />
-                  背景处理
+                  可编辑处理
                   {processedCount > 0 && processedCount < data.pages.length && (
                     <span className="ml-1.5 text-xs bg-warning/20 text-warning px-1.5 py-0.5 rounded">
                       {processedCount}/{data.pages.length}
@@ -1021,7 +981,7 @@ export const PPTAssemblerNode = memo(({ id, data, selected }: NodeProps<PPTAssem
                                       <CheckCircle2 className="w-2.5 h-2.5" />
                                     </div>
                                   )}
-                                  {page.processStatus === 'processing' && (
+                                  {(page.processStatus === 'detecting' || page.processStatus === 'inpainting') && (
                                     <div className="absolute bottom-0 right-0 bg-info text-info-content p-0.5 rounded-tl">
                                       <Loader2 className="w-2.5 h-2.5 animate-spin" />
                                     </div>
@@ -1077,10 +1037,6 @@ export const PPTAssemblerNode = memo(({ id, data, selected }: NodeProps<PPTAssem
                               updateNodeData<PPTAssemblerNodeData>(id, {
                                 exportMode: opt.value as PPTAssemblerNodeData["exportMode"],
                               });
-                              // 切换到仅背景模式时，自动切换到背景处理标签页
-                              if (opt.value === 'background') {
-                                setActiveTab('background');
-                              }
                             }}
                           >
                             <Icon className="w-4 h-4" />
@@ -1095,7 +1051,7 @@ export const PPTAssemblerNode = memo(({ id, data, selected }: NodeProps<PPTAssem
                     {data.exportMode === 'background' && (
                       <div className="text-sm text-info/80 flex items-center gap-1 mt-2">
                         <Zap className="w-4 h-4" />
-                        需要配置 OCR + IOPaint 服务，并完成背景处理后才能下载
+                        使用 Gemini 检测文字 + 样式提取 + 背景修复，生成可编辑文本框
                       </div>
                     )}
                   </div>
@@ -1103,109 +1059,33 @@ export const PPTAssemblerNode = memo(({ id, data, selected }: NodeProps<PPTAssem
                   {/* 服务配置（仅在背景模式显示） */}
                   {data.exportMode === 'background' && (
                     <>
-                      <div className="divider">服务配置</div>
+                      <div className="divider">文字检测配置</div>
 
-                      {/* OCR 服务配置 */}
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">PaddleOCR / EasyOCR 服务地址</label>
-                        <div className="flex gap-2">
-                          <input
-                            type="text"
-                            className="input input-bordered flex-1"
-                            value={data.ocrApiUrl}
-                            onChange={(e) => {
-                              updateNodeData<PPTAssemblerNodeData>(id, {
-                                ocrApiUrl: e.target.value,
-                              });
-                              setOcrTestStatus("idle");
-                            }}
-                            placeholder="http://127.0.0.1:8866"
-                          />
-                          <button
-                            className={`btn ${
-                              ocrTestStatus === "testing" ? "btn-disabled" : "btn-outline"
-                            }`}
-                            onClick={handleTestOcr}
-                            disabled={ocrTestStatus === "testing"}
-                          >
-                            {ocrTestStatus === "testing" ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              "测试"
-                            )}
-                          </button>
-                        </div>
-                        {ocrTestStatus !== "idle" && (
-                          <div className={`text-sm flex items-center gap-1 ${
-                            ocrTestStatus === "success" ? "text-success" : "text-error"
-                          }`}>
-                            {ocrTestStatus === "success" ? (
-                              <CheckCircle2 className="w-4 h-4" />
-                            ) : (
-                              <AlertCircle className="w-4 h-4" />
-                            )}
-                            {ocrTestMessage}
+                      {/* 供应商状态 */}
+                      {llmProvider ? (
+                        <div className="bg-success/10 border border-success/30 rounded-lg p-3">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle2 className="w-4 h-4 text-success" />
+                            <span className="text-sm">
+                              使用供应商：<span className="font-medium">{llmProvider.name}</span>
+                            </span>
                           </div>
-                        )}
-                      </div>
-
-                      {/* IOPaint 服务配置 */}
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">IOPaint 服务地址</label>
-                        <div className="flex gap-2">
-                          <input
-                            type="text"
-                            className="input input-bordered flex-1"
-                            value={data.inpaintApiUrl}
-                            onChange={(e) => {
-                              updateNodeData<PPTAssemblerNodeData>(id, {
-                                inpaintApiUrl: e.target.value,
-                              });
-                              setInpaintTestStatus("idle");
-                            }}
-                            placeholder="http://127.0.0.1:8080"
-                          />
-                          <button
-                            className={`btn ${
-                              inpaintTestStatus === "testing" ? "btn-disabled" : "btn-outline"
-                            }`}
-                            onClick={handleTestInpaint}
-                            disabled={inpaintTestStatus === "testing"}
-                          >
-                            {inpaintTestStatus === "testing" ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              "测试"
-                            )}
-                          </button>
+                          <p className="text-xs text-base-content/50 mt-1 ml-6">
+                            复用 LLM 供应商配置，可在供应商管理中修改
+                          </p>
                         </div>
-                        {inpaintTestStatus !== "idle" && (
-                          <div className={`text-sm flex items-center gap-1 ${
-                            inpaintTestStatus === "success" ? "text-success" : "text-error"
-                          }`}>
-                            {inpaintTestStatus === "success" ? (
-                              <CheckCircle2 className="w-4 h-4" />
-                            ) : (
-                              <AlertCircle className="w-4 h-4" />
-                            )}
-                            {inpaintTestMessage}
+                      ) : (
+                        <div className="bg-warning/10 border border-warning/30 rounded-lg p-3">
+                          <div className="flex items-center gap-2">
+                            <AlertCircle className="w-4 h-4 text-warning" />
+                            <span className="text-sm font-medium">未配置供应商</span>
                           </div>
-                        )}
-                      </div>
-
-                      {/* 部署提示 */}
-                      <div className="text-xs text-base-content/50 bg-base-200 p-3 rounded-lg space-y-2">
-                        <p className="font-medium">快速部署（Docker Compose）:</p>
-                        <code className="block bg-base-300 p-2 rounded text-[11px] overflow-x-auto whitespace-pre">
-{`cd docker
-docker-compose up -d`}
-                        </code>
-                        <div className="text-[11px] opacity-70 pt-1 border-t border-base-300">
-                          <p>• EasyOCR: http://127.0.0.1:8866 (文字检测识别)</p>
-                          <p>• IOPaint: http://127.0.0.1:8080 (AI 背景修复)</p>
-                          <p className="mt-1 text-warning">⚠ 首次启动需下载模型，约 3-5 分钟</p>
+                          <p className="text-xs text-base-content/50 mt-1 ml-6">
+                            请在供应商管理中配置 LLM 供应商（需使用 Google 协议）
+                          </p>
                         </div>
-                      </div>
+                      )}
+
                     </>
                   )}
                 </div>
@@ -1295,103 +1175,121 @@ docker-compose up -d`}
                     <div className="flex items-center gap-2 text-sm text-base-content/60 bg-secondary/10 rounded-lg px-3 py-2">
                       <Loader2 className="w-4 h-4 animate-spin text-secondary" />
                       <span>
-                        正在处理第 {data.processingProgress.current} 页
-                        {data.processingProgress.currentStep === 'ocr' && ' - 识别文字...'}
-                        {data.processingProgress.currentStep === 'inpaint' && ' - 修复背景...'}
+                        正在并发处理 {data.processingProgress.total - data.processingProgress.current} 个页面...
+                        （已完成 {data.processingProgress.current}/{data.processingProgress.total}）
                       </span>
                     </div>
                   )}
 
                   {/* 页面处理状态列表 */}
                   <div className="flex-1 overflow-y-auto space-y-1.5">
-                    {data.pages.map((page, index) => (
-                      <div
-                        key={index}
-                        className={`
-                          flex items-center gap-3 px-3 py-2 rounded-lg border cursor-pointer transition-all
-                          ${page.processStatus === 'completed' ? 'bg-success/5 border-success/20' : ''}
-                          ${page.processStatus === 'processing' ? 'bg-secondary/5 border-secondary/30' : ''}
-                          ${page.processStatus === 'error' ? 'bg-error/5 border-error/20' : ''}
-                          ${!page.processStatus || page.processStatus === 'pending' ? 'bg-base-200/50 border-base-300' : ''}
-                          hover:border-primary/50
-                        `}
-                        onClick={() => {
-                          setCurrentPage(index);
-                          setActiveTab('preview');
-                          if (page.processedBackground) {
-                            setPreviewMode('processed');
-                          }
-                        }}
-                      >
-                        {/* 缩略图 */}
-                        <div className="w-14 h-9 rounded overflow-hidden bg-base-300 flex-shrink-0">
-                          {page.processedThumbnail ? (
-                            <img
-                              src={`data:image/jpeg;base64,${page.processedThumbnail}`}
-                              alt={`Page ${page.pageNumber}`}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : page.thumbnail ? (
-                            <img
-                              src={`data:image/jpeg;base64,${page.thumbnail}`}
-                              alt={`Page ${page.pageNumber}`}
-                              className="w-full h-full object-cover opacity-50"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center">
-                              <span className="text-[10px] text-base-content/30">{page.pageNumber}</span>
+                    {data.pages.map((page, index) => {
+                      // 判断是否正在处理中（detecting 或 inpainting）
+                      const isPageProcessing = page.processStatus === 'detecting' || page.processStatus === 'inpainting';
+                      // 判断是否可以开始处理（pending 或 error 且不在批量处理中）
+                      // 判断是否可以开始处理（pending、error、completed 状态且该页面不在处理中）
+                      const canStartSingle = !isPageProcessing;
+
+                      return (
+                        <div
+                          key={index}
+                          className={`
+                            flex items-center gap-3 px-3 py-2 rounded-lg border cursor-pointer transition-all
+                            ${page.processStatus === 'completed' ? 'bg-success/5 border-success/20' : ''}
+                            ${isPageProcessing ? 'bg-secondary/5 border-secondary/30' : ''}
+                            ${page.processStatus === 'error' ? 'bg-error/5 border-error/20' : ''}
+                            ${!page.processStatus || page.processStatus === 'pending' ? 'bg-base-200/50 border-base-300' : ''}
+                            hover:border-primary/50
+                          `}
+                          onClick={() => {
+                            setCurrentPage(index);
+                            setActiveTab('preview');
+                            if (page.processedBackground) {
+                              setPreviewMode('processed');
+                            }
+                          }}
+                        >
+                          {/* 缩略图 */}
+                          <div className="w-14 h-9 rounded overflow-hidden bg-base-300 flex-shrink-0">
+                            {page.processedThumbnail ? (
+                              <img
+                                src={`data:image/jpeg;base64,${page.processedThumbnail}`}
+                                alt={`Page ${page.pageNumber}`}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : page.thumbnail ? (
+                              <img
+                                src={`data:image/jpeg;base64,${page.thumbnail}`}
+                                alt={`Page ${page.pageNumber}`}
+                                className="w-full h-full object-cover opacity-50"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center">
+                                <span className="text-[10px] text-base-content/30">{page.pageNumber}</span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* 页面信息 */}
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-medium truncate">
+                              第 {page.pageNumber} 页：{page.heading}
                             </div>
-                          )}
-                        </div>
-
-                        {/* 页面信息 */}
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium truncate">
-                            第 {page.pageNumber} 页：{page.heading}
+                            <div className="text-xs text-base-content/50">
+                              {page.processStatus === 'completed' && '✓ 处理完成'}
+                              {page.processStatus === 'detecting' && '文字检测中...'}
+                              {page.processStatus === 'inpainting' && '背景修复中...'}
+                              {page.processStatus === 'error' && `✗ ${page.processError}`}
+                              {(!page.processStatus || page.processStatus === 'pending') && '等待处理'}
+                            </div>
                           </div>
-                          <div className="text-xs text-base-content/50">
-                            {page.processStatus === 'completed' && '✓ 处理完成'}
-                            {page.processStatus === 'processing' && '处理中...'}
-                            {page.processStatus === 'error' && `✗ ${page.processError}`}
-                            {(!page.processStatus || page.processStatus === 'pending') && '等待处理'}
+
+                          {/* 操作按钮 */}
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            {/* 开始/重试/重新处理按钮 - 只要不在处理中就显示 */}
+                            {canStartSingle && (
+                              <button
+                                className={`btn btn-ghost btn-xs p-1 ${
+                                  page.processStatus === 'error'
+                                    ? 'text-error hover:bg-error/10'
+                                    : page.processStatus === 'completed'
+                                    ? 'text-base-content/50 hover:bg-base-300'
+                                    : 'text-secondary hover:bg-secondary/10'
+                                }`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleProcessSinglePage(index);
+                                }}
+                                title={
+                                  page.processStatus === 'error' ? '重试' :
+                                  page.processStatus === 'completed' ? '重新处理' : '开始处理'
+                                }
+                              >
+                                {page.processStatus === 'completed' || page.processStatus === 'error' ? (
+                                  <RotateCcw className="w-3.5 h-3.5" />
+                                ) : (
+                                  <Play className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                            )}
+
+                            {/* 状态图标 */}
+                            {page.processStatus === 'completed' && (
+                              <CheckCircle2 className="w-4 h-4 text-success" />
+                            )}
+                            {isPageProcessing && (
+                              <Loader2 className="w-4 h-4 text-secondary animate-spin" />
+                            )}
+                            {page.processStatus === 'error' && (
+                              <AlertCircle className="w-4 h-4 text-error" />
+                            )}
+                            {(!page.processStatus || page.processStatus === 'pending') && (
+                              <div className="w-4 h-4 rounded-full border-2 border-base-content/20" />
+                            )}
                           </div>
                         </div>
-
-                        {/* 操作按钮 */}
-                        <div className="flex items-center gap-1 flex-shrink-0">
-                          {/* 重试按钮 - 失败或已完成时显示 */}
-                          {(page.processStatus === 'error' || page.processStatus === 'completed') && (
-                            <button
-                              className={`btn btn-ghost btn-xs p-1 ${
-                                page.processStatus === 'error' ? 'text-error hover:bg-error/10' : 'text-base-content/50 hover:bg-base-300'
-                              }`}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleRetryPage(index);
-                              }}
-                              disabled={data.status === 'processing'}
-                              title="重新处理"
-                            >
-                              <RotateCcw className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-
-                          {/* 状态图标 */}
-                          {page.processStatus === 'completed' && (
-                            <CheckCircle2 className="w-4 h-4 text-success" />
-                          )}
-                          {page.processStatus === 'processing' && (
-                            <Loader2 className="w-4 h-4 text-secondary animate-spin" />
-                          )}
-                          {page.processStatus === 'error' && (
-                            <AlertCircle className="w-4 h-4 text-error" />
-                          )}
-                          {(!page.processStatus || page.processStatus === 'pending') && (
-                            <div className="w-4 h-4 rounded-full border-2 border-base-content/20" />
-                          )}
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -1404,7 +1302,7 @@ docker-compose up -d`}
                 {data.exportMode === 'background' && (
                   canDownload
                     ? '所有页面处理完成，可以下载'
-                    : '请先完成背景处理'
+                    : '请先完成可编辑处理'
                 )}
               </div>
               <div className="flex items-center gap-2">

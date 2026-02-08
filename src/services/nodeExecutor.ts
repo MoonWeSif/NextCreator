@@ -17,8 +17,8 @@ import { useFlowStore } from "@/stores/flowStore";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { generateImage, editImage } from "@/services/imageService";
 import { generateLLMContent } from "@/services/llmService";
-import { createVideoTask, pollVideoTask } from "@/services/videoService";
-import { saveImage, isTauriEnvironment, readImage } from "@/services/fileStorageService";
+import { createVideoTask, pollVideoTask } from "@/services/videoGeneration";
+import { saveImage, readImage } from "@/services/fileStorageService";
 
 // 自定义节点类型
 type CustomNode = Node<CustomNodeData>;
@@ -52,7 +52,8 @@ async function getConnectedInputDataFromCanvas(
   const edges = canvas.edges as Edge[];
   const incomingEdges = edges.filter((edge) => edge.target === nodeId);
 
-  let prompt: string | undefined;
+  // 支持多个 prompt 输入，收集后拼接
+  const prompts: string[] = [];
   const images: string[] = [];
   const files: Array<{ data: string; mimeType: string; fileName?: string }> = [];
 
@@ -63,12 +64,13 @@ async function getConnectedInputDataFromCanvas(
     const targetHandle = edge.targetHandle;
 
     if (targetHandle === "input-prompt") {
+      // 从 prompt 输入端口连接的数据（支持多个，会自动拼接）
       if (sourceNode.type === "promptNode") {
         const data = sourceNode.data as { prompt?: string };
-        prompt = data.prompt;
+        if (data.prompt) prompts.push(data.prompt);
       } else if (sourceNode.type === "llmContentNode") {
         const data = sourceNode.data as { outputContent?: string };
-        prompt = data.outputContent;
+        if (data.outputContent) prompts.push(data.outputContent);
       }
     } else if (targetHandle === "input-image") {
       let imageData: string | undefined;
@@ -117,10 +119,10 @@ async function getConnectedInputDataFromCanvas(
       // 兼容旧连接
       if (sourceNode.type === "promptNode") {
         const data = sourceNode.data as { prompt?: string };
-        prompt = data.prompt;
+        if (data.prompt) prompts.push(data.prompt);
       } else if (sourceNode.type === "llmContentNode") {
         const data = sourceNode.data as { outputContent?: string };
-        prompt = data.outputContent;
+        if (data.outputContent) prompts.push(data.outputContent);
       } else if (sourceNode.type === "imageInputNode") {
         const data = sourceNode.data as { imageData?: string; imagePath?: string };
         let imageData: string | undefined;
@@ -158,6 +160,8 @@ async function getConnectedInputDataFromCanvas(
     }
   }
 
+  // 将多个 prompt 拼接成一个字符串，用换行符分隔
+  const prompt = prompts.length > 0 ? prompts.join("\n\n") : undefined;
   return { prompt, images, files };
 }
 
@@ -273,7 +277,7 @@ async function executeImageGeneratorNode(
 
     // 保存图片
     let imagePath: string | undefined;
-    if (isTauriEnvironment() && response.imageData) {
+    if (response.imageData) {
       try {
         const imageInfo = await saveImage(response.imageData, canvasId, node.id);
         imagePath = imageInfo.path;
@@ -445,7 +449,7 @@ async function executeVideoGeneratorNode(
       seconds: data.seconds,
       size: data.size,
       inputImage: images.length > 0 ? images[0] : undefined,
-    }, signal);
+    }, "videoGenerator", signal);
 
     if (createResult.error || !createResult.taskId) {
       const errorMsg = createResult.error || "创建任务失败";

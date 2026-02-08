@@ -654,6 +654,7 @@ export function OutlineTab({
                                     id={img.id}
                                     fileName={img.fileName || `图片-${img.id.slice(0, 4)}`}
                                     imageData={img.imageData}
+                                    imagePath={img.imagePath}
                                     onRemove={() => removeSupplementImageRef(index, img.id)}
                                   />
                                 ))}

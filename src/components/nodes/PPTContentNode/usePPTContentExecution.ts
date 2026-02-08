@@ -4,7 +4,7 @@ import { useFlowStore } from "@/stores/flowStore";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { generateText, validateJsonOutput } from "@/services/llmService";
 import { editImage } from "@/services/imageService";
-import { saveImage, isTauriEnvironment } from "@/services/fileStorageService";
+import { saveImage } from "@/services/fileStorageService";
 import { generateThumbnail } from "@/utils/imageCompression";
 import type { PPTContentNodeData, PPTOutline, PPTPageItem, ConnectedImageInfo } from "./types";
 import { buildSystemPrompt, buildPageImagePrompt, getVisualStylePrompt, PPT_OUTLINE_JSON_SCHEMA, DEFAULT_OUTLINE_MODEL, DEFAULT_IMAGE_MODEL } from "./types";
@@ -19,11 +19,16 @@ interface UsePPTContentExecutionProps {
 export function usePPTContentExecution({
   nodeId,
   data,
-  getTemplateImage,
-  getConnectedImages,
+  // 以下参数保留接口兼容性，但内部使用异步方式从 store 获取图片
+  getTemplateImage: _getTemplateImage,
+  getConnectedImages: _getConnectedImages,
 }: UsePPTContentExecutionProps) {
+  // 使用下划线变量避免 lint 警告
+  void _getTemplateImage;
+  void _getConnectedImages;
+
   const updateNodeData = useFlowStore((state) => state.updateNodeData);
-  const getConnectedImagesWithInfo = useFlowStore((state) => state.getConnectedImagesWithInfo);
+  const getConnectedImagesWithInfoAsync = useFlowStore((state) => state.getConnectedImagesWithInfoAsync);
 
   // 用于控制批量生成的暂停/停止
   const isPausedRef = useRef(false);
@@ -291,7 +296,19 @@ export function usePPTContentExecution({
       abortControllersRef.current.set(pageId, abortController);
 
       try {
-        const templateImage = getTemplateImage();
+        // 异步获取所有连接的图片信息（包括模板基底图和补充图片）
+        // 这样可以正确从文件系统加载图片数据
+        const allConnectedImages = await getConnectedImagesWithInfoAsync(nodeId);
+
+        // 获取模板基底图：优先使用选中的，否则使用第一张
+        let templateImage: string | undefined;
+        if (data.selectedTemplateId) {
+          const selected = allConnectedImages.find(img => img.id === data.selectedTemplateId);
+          templateImage = selected?.imageData;
+        }
+        if (!templateImage && allConnectedImages.length > 0) {
+          templateImage = allConnectedImages[0]?.imageData;
+        }
 
         // 检查是否被停止
         if (stopRequestedRef.current.has(pageId) || isPausedRef.current) {
@@ -300,14 +317,11 @@ export function usePPTContentExecution({
           return false;
         }
 
-        // 获取所有连接的图片信息（用于补充图片）
-        const allConnectedImages = getConnectedImages?.() || getConnectedImagesWithInfo(nodeId);
-
         // 获取当前页引用的补充图片
         const supplementImageRefs = page.supplement?.imageRefs || [];
         const supplementImages = supplementImageRefs
           .map(refId => allConnectedImages.find(img => img.id === refId))
-          .filter((img): img is ConnectedImageInfo => !!img);
+          .filter((img): img is ConnectedImageInfo => !!img && !!img.imageData);
 
         // 判断是否为标题页（第一页且开启了标题页模式）
         const isTitlePage = page.pageNumber === 1 && data.firstPageIsTitlePage;
@@ -384,11 +398,11 @@ export function usePPTContentExecution({
         }
         const attempts = (currentPage?.result?.attempts || 0) + 1;
 
-        // 在 Tauri 环境下保存图片到文件系统（使用原始画布 ID）
+        // 保存图片到文件系统（使用原始画布 ID）
         let imagePath: string | undefined;
         let thumbnailPath: string | undefined;
         const saveCanvasId = targetCanvasId || currentActiveId;
-        if (isTauriEnvironment() && saveCanvasId) {
+        if (saveCanvasId) {
           try {
             const imageInfo = await saveImage(
               response.imageData,
@@ -397,7 +411,6 @@ export function usePPTContentExecution({
             );
             imagePath = imageInfo.path;
           } catch (saveError) {
-            // 文件保存失败不影响主流程，只是没有本地存储
             console.warn("PPT 页面图片保存到文件系统失败:", saveError);
           }
         }
@@ -411,8 +424,8 @@ export function usePPTContentExecution({
             format: "jpeg",
           });
 
-          // 在 Tauri 环境下也保存缩略图
-          if (isTauriEnvironment() && saveCanvasId && thumbnail) {
+          // 也保存缩略图
+          if (saveCanvasId && thumbnail) {
             try {
               const thumbInfo = await saveImage(
                 thumbnail,
@@ -459,7 +472,7 @@ export function usePPTContentExecution({
         abortControllersRef.current.delete(pageId);
       }
     },
-    [data.pages, data.imageConfig.aspectRatio, data.imageConfig.imageSize, data.imageModel, data.visualStyleTemplate, data.customVisualStylePrompt, data.firstPageIsTitlePage, getTemplateImage, nodeId, updatePageState, getConnectedImages, getConnectedImagesWithInfo]
+    [data.pages, data.selectedTemplateId, data.imageConfig.aspectRatio, data.imageConfig.imageSize, data.imageModel, data.visualStyleTemplate, data.customVisualStylePrompt, data.firstPageIsTitlePage, nodeId, updatePageState, getConnectedImagesWithInfoAsync]
   );
 
   // 开始批量生成（并发执行所有待处理任务）
@@ -731,7 +744,7 @@ export function usePPTContentExecution({
         page = currentData?.pages.find((p) => p.id === pageId);
       }
 
-      if (isTauriEnvironment() && activeCanvasId) {
+      if (activeCanvasId) {
         try {
           const imageInfo = await saveImage(
             imageData,
@@ -753,8 +766,8 @@ export function usePPTContentExecution({
           format: "jpeg",
         });
 
-        // 在 Tauri 环境下也保存缩略图
-        if (isTauriEnvironment() && activeCanvasId && manualThumbnail) {
+        // 也保存缩略图
+        if (activeCanvasId && manualThumbnail) {
           try {
             const thumbInfo = await saveImage(
               manualThumbnail,

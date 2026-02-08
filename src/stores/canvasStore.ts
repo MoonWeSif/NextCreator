@@ -3,7 +3,6 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import { v4 as uuidv4 } from "uuid";
 import type { CustomNode, CustomEdge, ImageGeneratorNodeData, ImageInputNodeData } from "@/types";
 import { tauriStorage } from "@/utils/tauriStorage";
-import { isTauriEnvironment } from "@/services/fileStorageService";
 
 // 画布数据结构
 export interface CanvasData {
@@ -160,15 +159,7 @@ export const useCanvasStore = create<CanvasStore>()(
         useCanvasStore.setState({ _hasHydrated: true });
       },
       partialize: (state) => {
-        // 在 Tauri 环境中，清除有文件路径的节点的 base64 数据以减少存储大小
-        // 在浏览器环境中，保留所有数据
-        if (!isTauriEnvironment()) {
-          return {
-            canvases: state.canvases,
-            activeCanvasId: state.activeCanvasId,
-          };
-        }
-
+        // 清除有文件路径的节点的 base64 数据以减少存储大小
         const canvasesForStorage = state.canvases.map((canvas) => ({
           ...canvas,
           nodes: canvas.nodes.map((node) => {

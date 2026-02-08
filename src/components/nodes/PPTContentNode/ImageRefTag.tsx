@@ -1,17 +1,26 @@
 import { memo, useState } from "react";
 import { X, Maximize2 } from "lucide-react";
 import { ImagePreviewModal } from "@/components/ui/ImagePreviewModal";
+import { getImageUrl } from "@/services/fileStorageService";
 
 interface ImageRefTagProps {
   id: string;
   fileName: string;
   imageData: string;
+  imagePath?: string;
   onRemove: (id: string) => void;
 }
 
 // 图片引用标签组件 - 显示缩略图和文件名，支持预览和删除
-export const ImageRefTag = memo(({ id, fileName, imageData, onRemove }: ImageRefTagProps) => {
+export const ImageRefTag = memo(({ id, fileName, imageData, imagePath, onRemove }: ImageRefTagProps) => {
   const [showPreview, setShowPreview] = useState(false);
+
+  // 优先使用 imagePath，否则使用 imageData
+  const imageSrc = imagePath
+    ? getImageUrl(imagePath)
+    : imageData
+      ? `data:image/png;base64,${imageData}`
+      : undefined;
 
   return (
     <>
@@ -22,7 +31,7 @@ export const ImageRefTag = memo(({ id, fileName, imageData, onRemove }: ImageRef
           onClick={() => setShowPreview(true)}
         >
           <img
-            src={`data:image/png;base64,${imageData}`}
+            src={imageSrc}
             alt={fileName}
             className="w-full h-full object-cover"
           />
@@ -57,6 +66,7 @@ export const ImageRefTag = memo(({ id, fileName, imageData, onRemove }: ImageRef
       {showPreview && (
         <ImagePreviewModal
           imageData={imageData}
+          imagePath={imagePath}
           fileName={fileName}
           onClose={() => setShowPreview(false)}
         />

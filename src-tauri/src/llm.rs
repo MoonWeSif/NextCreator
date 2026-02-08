@@ -115,6 +115,78 @@ struct OpenAIError {
     message: String,
 }
 
+// ==================== OpenAI Responses 协议结构 ====================
+
+#[derive(Debug, Serialize)]
+struct OpenAIResponsesRequest {
+    model: String,
+    input: Vec<OpenAIResponsesInputItem>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    instructions: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    temperature: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    max_output_tokens: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    text: Option<OpenAIResponsesText>,
+}
+
+#[derive(Debug, Serialize)]
+struct OpenAIResponsesInputItem {
+    #[serde(rename = "type")]
+    item_type: String,
+    role: String,
+    content: Vec<OpenAIResponsesInputContent>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(tag = "type")]
+enum OpenAIResponsesInputContent {
+    #[serde(rename = "input_text")]
+    InputText { text: String },
+    #[serde(rename = "input_image")]
+    InputImage { image_url: OpenAIImageUrl },
+}
+
+#[derive(Debug, Serialize)]
+struct OpenAIResponsesText {
+    format: OpenAIResponsesTextFormat,
+}
+
+#[derive(Debug, Serialize)]
+struct OpenAIResponsesTextFormat {
+    #[serde(rename = "type")]
+    format_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    schema: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    strict: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenAIResponsesResponse {
+    output: Option<Vec<OpenAIResponsesOutputItem>>,
+    error: Option<OpenAIError>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenAIResponsesOutputItem {
+    #[serde(rename = "type")]
+    item_type: String,
+    role: Option<String>,
+    content: Option<Vec<OpenAIResponsesContent>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenAIResponsesContent {
+    #[serde(rename = "type")]
+    content_type: String,
+    text: Option<String>,
+    refusal: Option<String>,
+}
+
 // ==================== OpenAI Structured Output Helpers ====================
 
 #[derive(Debug, Clone, Copy)]
@@ -541,6 +613,230 @@ pub async fn openai_chat_completion(params: LLMRequestParams) -> LLMResult {
     }
 
     println!("[Rust] OpenAI result: content length = {}", content.as_ref().map(|c| c.len()).unwrap_or(0));
+
+    LLMResult {
+        success: true,
+        content,
+        error: None,
+    }
+}
+
+// ==================== OpenAI Responses API 代理命令 ====================
+
+#[tauri::command]
+pub async fn openai_responses(params: LLMRequestParams) -> LLMResult {
+    println!("[Rust] openai_responses called");
+    println!("[Rust] base_url: {}", params.base_url);
+    println!("[Rust] model: {}", params.model);
+
+    // 构建输入内容
+    let mut content: Vec<OpenAIResponsesInputContent> = vec![
+        OpenAIResponsesInputContent::InputText { text: params.prompt.clone() }
+    ];
+
+    if let Some(files) = &params.files {
+        for file in files {
+            if file.mime_type.starts_with("image/") {
+                content.push(OpenAIResponsesInputContent::InputImage {
+                    image_url: OpenAIImageUrl {
+                        url: format!("data:{};base64,{}", file.mime_type, file.data),
+                    },
+                });
+            }
+        }
+    }
+
+    let input = vec![OpenAIResponsesInputItem {
+        item_type: "message".to_string(),
+        role: "user".to_string(),
+        content,
+    }];
+
+    // 构建 text.format（结构化输出）
+    let text = params.response_json_schema.as_ref().map(|schema| {
+        match select_openai_structured_output_mode(&params.model) {
+            OpenAIStructuredOutputMode::JsonSchema => {
+                println!("[Rust] OpenAI Responses text.format: json_schema (strict)");
+                OpenAIResponsesText {
+                    format: OpenAIResponsesTextFormat {
+                        format_type: "json_schema".to_string(),
+                        name: Some("response".to_string()),
+                        schema: Some(normalize_schema_for_openai(schema)),
+                        strict: Some(true),
+                    },
+                }
+            }
+            OpenAIStructuredOutputMode::JsonObject => {
+                println!("[Rust] OpenAI Responses text.format: json_object");
+                OpenAIResponsesText {
+                    format: OpenAIResponsesTextFormat {
+                        format_type: "json_object".to_string(),
+                        name: None,
+                        schema: None,
+                        strict: None,
+                    },
+                }
+            }
+        }
+    });
+
+    // 构建请求体
+    let request_body = OpenAIResponsesRequest {
+        model: params.model.clone(),
+        input,
+        instructions: params.system_prompt.clone(),
+        temperature: params.temperature,
+        max_output_tokens: params.max_tokens,
+        text,
+    };
+
+    // 构建 URL
+    let url = format!(
+        "{}/v1/responses",
+        params.base_url.trim_end_matches('/')
+    );
+    println!("[Rust] Request URL: {}", url);
+
+    // 创建 HTTP 客户端
+    let client = match Client::builder()
+        .timeout(Duration::from_secs(300))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            return LLMResult {
+                success: false,
+                content: None,
+                error: Some(format!("创建 HTTP 客户端失败: {}", e)),
+            }
+        }
+    };
+
+    // 发送请求
+    println!("[Rust] Sending OpenAI Responses request...");
+    let start_time = std::time::Instant::now();
+
+    let response = match client
+        .post(&url)
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", params.api_key))
+        .json(&request_body)
+        .send()
+        .await
+    {
+        Ok(r) => {
+            println!("[Rust] Response received in {:?}", start_time.elapsed());
+            r
+        },
+        Err(e) => {
+            println!("[Rust] Request failed: {}", e);
+            let error_msg = if e.is_timeout() {
+                "请求超时，请稍后重试".to_string()
+            } else if e.is_connect() {
+                "无法连接到服务器，请检查网络".to_string()
+            } else {
+                format!("请求失败: {}", e)
+            };
+            return LLMResult {
+                success: false,
+                content: None,
+                error: Some(error_msg),
+            };
+        }
+    };
+
+    // 检查 HTTP 状态码
+    let status = response.status();
+    if !status.is_success() {
+        let error_text = response.text().await.unwrap_or_default();
+        println!("[Rust] Error response: {}", error_text);
+        return LLMResult {
+            success: false,
+            content: None,
+            error: Some(format!("API 返回错误 ({}): {}", status, error_text)),
+        };
+    }
+
+    // 解析响应
+    let response_text = match response.text().await {
+        Ok(t) => t,
+        Err(e) => {
+            return LLMResult {
+                success: false,
+                content: None,
+                error: Some(format!("获取响应失败: {}", e)),
+            };
+        }
+    };
+
+    let responses_response: OpenAIResponsesResponse = match serde_json::from_str(&response_text) {
+        Ok(r) => r,
+        Err(e) => {
+            println!("[Rust] Failed to parse JSON: {}", e);
+            return LLMResult {
+                success: false,
+                content: None,
+                error: Some(format!("解析响应失败: {}", e)),
+            };
+        }
+    };
+
+    // 检查 API 错误
+    if let Some(err) = responses_response.error {
+        return LLMResult {
+            success: false,
+            content: None,
+            error: Some(err.message),
+        };
+    }
+
+    // 提取内容
+    let mut text_chunks: Vec<String> = Vec::new();
+    let mut refusal: Option<String> = None;
+
+    if let Some(outputs) = responses_response.output {
+        for item in outputs {
+            if item.item_type == "message" {
+                if let Some(contents) = item.content {
+                    for c in contents {
+                        if c.content_type == "output_text" {
+                            if let Some(t) = c.text {
+                                text_chunks.push(t);
+                            }
+                        } else if c.content_type == "refusal" {
+                            if let Some(r) = c.refusal {
+                                refusal = Some(r);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if let Some(r) = refusal {
+        return LLMResult {
+            success: false,
+            content: None,
+            error: Some(r),
+        };
+    }
+
+    let content = if text_chunks.is_empty() {
+        None
+    } else {
+        Some(text_chunks.join(""))
+    };
+
+    if content.is_none() {
+        return LLMResult {
+            success: false,
+            content: None,
+            error: Some("API 未返回有效内容".to_string()),
+        };
+    }
+
+    println!("[Rust] OpenAI Responses result: content length = {}", content.as_ref().map(|c| c.len()).unwrap_or(0));
 
     LLMResult {
         success: true,

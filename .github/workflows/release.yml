@@ -15,14 +15,17 @@ jobs:
       matrix:
         include:
           # macOS Apple Silicon (M1/M2/M3)
-          - platform: 'macos-latest'
+          - platform: 'macos-15'
             args: '--target aarch64-apple-darwin'
+            target: 'aarch64-apple-darwin'
           # macOS Intel
-          - platform: 'macos-latest'
+          - platform: 'macos-15-intel'
             args: '--target x86_64-apple-darwin'
+            target: 'x86_64-apple-darwin'
           # Windows
           - platform: 'windows-latest'
             args: ''
+            target: ''
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -39,18 +42,22 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Install Rust stable
+      - name: Install Rust stable (with target)
+        if: matrix.target != ''
         uses: dtolnay/rust-toolchain@stable
         with:
-          # macOS 需要同时支持 Intel 和 Apple Silicon 架构
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+          targets: ${{ matrix.target }}
+
+      - name: Install Rust stable
+        if: matrix.target == ''
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
           workspaces: './src-tauri -> target'
           # 版本更新时修改此 key 来强制刷新缓存
-          shared-key: "v0.2.0"
+          shared-key: "v0.2.3"
 
       - name: Install frontend dependencies
         run: bun install
@@ -70,6 +77,13 @@ jobs:
             - **macOS (Apple Silicon M1/M2/M3)**: `NextCreator_*_aarch64.dmg`
             - **macOS (Intel)**: `NextCreator_*_x64.dmg`
             - **Windows**: `NextCreator_*_x64-setup.exe` 或 `.msi`
+              
+            由于应用未经 Apple 签名，首次打开可能会提示"无法验证开发者"。请在终端执行以下命令解决：
+
+            ```bash
+            xattr -rc "/Applications/NextCreator.app"
+            ```
+            
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}

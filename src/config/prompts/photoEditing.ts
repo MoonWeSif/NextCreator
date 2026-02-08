@@ -1,0 +1,56 @@
+import type { PromptCategory } from "../promptConfig";
+
+// 照片编辑类提示词
+export const photoEditingCategory: PromptCategory = {
+  id: "photo-editing",
+  name: "照片编辑",
+  nameEn: "Photo Editing & Restoration",
+  icon: "ImagePlus",
+  description: "智能扩图、人物移除和照片修复",
+  prompts: [
+    {
+      id: "smart-outpainting",
+      title: "智能扩图",
+      titleEn: "Composition Rescue (Smart Outpainting)",
+      description: "通过智能生成匹配的场景来扩展图片比例",
+      prompt: `Zoom out and expand this image to a 16:9 aspect ratio (computer wallpaper size). Context Awareness: Seamlessly extend the scenery on both left and right sides. Match the original lighting, weather, and texture perfectly. Logical Completion: If there are cut-off objects (like a shoulder, a tree branch, or a building edge) on the borders, complete them naturally based on logical inference. Do not distort the original center image.`,
+      tags: ["扩图", "壁纸", "编辑", "16:9"],
+      source: "WeChat Article",
+      previewImage: "https://github.com/user-attachments/assets/cc8c4e87-fe0f-4b8a-a610-a6d55ed0294c",
+      nodeTemplate: { requiresImageInput: true, generatorType: "pro", aspectRatio: "16:9" },
+    },
+    {
+      id: "crowd-removal",
+      title: "智能人物移除",
+      titleEn: "Smart Crowd Removal",
+      description: "移除背景中不需要的人物并用合理的纹理填充",
+      prompt: `Remove all the tourists/people in the background behind the main subject. Intelligent Fill: Replace them with realistic background elements that logically fit the scene (e.g., extend the cobblestone pavement, empty park benches, or grass textures). Consistency: Ensure no blurry artifacts or 'smudges' remain. The filled area must have the same grain, focus depth, and lighting as the rest of the photo.`,
+      tags: ["移除", "背景", "编辑", "旅游照片"],
+      source: "WeChat Article",
+      previewImage: "https://github.com/user-attachments/assets/bade2fb0-f7d8-4435-91d4-ad0b41819c9b",
+      nodeTemplate: { requiresImageInput: true, generatorType: "pro", aspectRatio: "16:9" },
+    },
+    {
+      id: "cctv-simulation",
+      title: "CCTV监控风格模拟",
+      titleEn: "Face Detection CCTV Simulation",
+      description: "创建带有人脸检测的高角度CCTV监控画面",
+      prompt: `Create a high angle CCTV surveillance shot using the uploaded image as the source. Detect every visible person in the image and automatically draw a white rectangular bounding box around each face. For the most prominent person, add a large zoom in inset: a sharp, enhanced close-up of their face displayed in a floating rectangular frame connected with a thin white line. Keep the main image slightly noisy and security camera like (soft grain, slight distortion, muted colors), while the zoom in face box should be clearer, brighter, and more detailed. No text, no timestamps, no overlays except the boxes and connecting line. Maintain the original scene layout, angle, and environment of the uploaded image.`,
+      tags: ["CCTV", "监控", "人脸检测", "创意"],
+      source: "@egeberkina",
+      previewImage: "https://pbs.twimg.com/media/G673aBCWUAAFUGn?format=jpg&name=900x900",
+      nodeTemplate: { requiresImageInput: true, generatorType: "pro", aspectRatio: "16:9" },
+    },
+    {
+      id: "upscale-4k",
+      title: "提高分辨率",
+      titleEn: "Upscale to 4K",
+      description: "将图片升级到4K分辨率",
+      prompt: `将此图片升级到4K分辨率。`,
+      tags: ["提高分辨率", "4K", "画质", "增强"],
+      source: "@MehdiSharifi",
+      previewImage: "https://pbs.twimg.com/media/G6WypOCW4AANo7H.jpg?format=jpg&name=large",
+      nodeTemplate: { requiresImageInput: true, generatorType: "pro", aspectRatio: "1:1" },
+    },
+  ],
+};

@@ -66,7 +66,8 @@ export const PPT_OUTLINE_JSON_SCHEMA = {
 export interface ConnectedImageInfo {
   id: string;                  // 图片唯一标识（节点 ID）
   fileName?: string;           // 文件名（用于显示）
-  imageData: string;           // base64 数据
+  imageData: string;           // base64 数据（可能为空，需要从 imagePath 加载）
+  imagePath?: string;          // 图片文件路径（Tauri 环境下使用）
 }
 
 // PPT 单页项目状态

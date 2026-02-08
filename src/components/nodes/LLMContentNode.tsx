@@ -1,7 +1,7 @@
 import { memo, useCallback, useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Handle, Position, type NodeProps, type Node } from "@xyflow/react";
-import { MessageSquareText, Play, AlertCircle, Copy, Check, FileUp, Eye, X, Settings2, ImageIcon, AlertTriangle, CircleAlert } from "lucide-react";
+import { MessageSquareText, Play, AlertCircle, Copy, Check, FileUp, Eye, X, Settings2, ImageIcon, AlertTriangle, CircleAlert, Trash2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { useFlowStore } from "@/stores/flowStore";
 import { useCanvasStore } from "@/stores/canvasStore";
@@ -9,6 +9,7 @@ import { generateLLMContent } from "@/services/llmService";
 import { useLoadingDots } from "@/hooks/useLoadingDots";
 import { useLLMPresetModels } from "@/config/presetModels";
 import { ErrorDetailModal } from "@/components/ui/ErrorDetailModal";
+import { useCustomModelStore } from "@/stores/customModelStore";
 import type { LLMContentNodeData } from "@/types";
 
 // 定义节点类型
@@ -133,6 +134,7 @@ export const LLMContentNode = memo(({ id, data, selected }: NodeProps<LLMContent
       updateNodeDataWithCanvas(id, {
         status: "error",
         error: "请连接提示词节点、文件上传节点或图片输入节点",
+        errorDetails: undefined,
       });
       return;
     }
@@ -179,12 +181,14 @@ export const LLMContentNode = memo(({ id, data, selected }: NodeProps<LLMContent
         updateNodeDataWithCanvas(id, {
           status: "error",
           error: "未返回内容",
+          errorDetails: undefined,
         });
       }
     } catch {
       updateNodeDataWithCanvas(id, {
         status: "error",
         error: "生成失败",
+        errorDetails: undefined,
       });
     }
   }, [id, data.model, data.systemPrompt, data.temperature, data.maxTokens, updateNodeDataWithCanvas, getConnectedInputDataAsync]);
@@ -213,6 +217,14 @@ export const LLMContentNode = memo(({ id, data, selected }: NodeProps<LLMContent
         className="!w-3 !h-3 !bg-blue-500 !border-2 !border-white"
         style={{ top: "25%" }}
       />
+      {/* prompt 端口标签 */}
+      <div
+        className="absolute -left-9 text-[10px] text-base-content/50 tooltip tooltip-left"
+        style={{ top: "25%", transform: "translateY(-100%)" }}
+        data-tip="支持多个输入，将自动拼接"
+      >
+        提示词
+      </div>
 
       {/* 输入端口 - image 类型 */}
       <Handle
@@ -222,6 +234,13 @@ export const LLMContentNode = memo(({ id, data, selected }: NodeProps<LLMContent
         className="!w-3 !h-3 !bg-green-500 !border-2 !border-white"
         style={{ top: "50%" }}
       />
+      {/* image 端口标签 */}
+      <div
+        className="absolute -left-6 text-[10px] text-base-content/50"
+        style={{ top: "50%", transform: "translateY(-100%)" }}
+      >
+        图片
+      </div>
 
       {/* 输入端口 - file 类型 */}
       <Handle
@@ -231,6 +250,13 @@ export const LLMContentNode = memo(({ id, data, selected }: NodeProps<LLMContent
         className="!w-3 !h-3 !bg-orange-500 !border-2 !border-white"
         style={{ top: "75%" }}
       />
+      {/* file 端口标签 */}
+      <div
+        className="absolute -left-6 text-[10px] text-base-content/50"
+        style={{ top: "75%", transform: "translateY(-100%)" }}
+      >
+        文件
+      </div>
 
       {/* 节点头部 */}
       <div className="flex items-center justify-between px-3 py-2 bg-gradient-to-r from-teal-500 to-cyan-500 rounded-t-lg">
@@ -494,8 +520,11 @@ function LLMSettingsModal({ data, presetModels, onClose, onUpdateData }: LLMSett
   // 使用本地 state 缓冲 systemPrompt，避免中文输入时因频繁更新 store 导致乱码
   const [localSystemPrompt, setLocalSystemPrompt] = useState(data.systemPrompt || "");
 
-  // 检查是否是自定义模型
-  const isCustomModel = !presetModels.some((m) => m.value === data.model);
+  const { addCustomModel, removeCustomModel, getCustomModels } = useCustomModelStore();
+  const customModels = getCustomModels("llmContent");
+
+  // 检查是否是自定义模型（不在预设列表和用户自定义列表中）
+  const isCustomModel = !presetModels.some((m) => m.value === data.model) && !customModels.includes(data.model);
 
   // 进入动画
   useEffect(() => {
@@ -526,10 +555,18 @@ function LLMSettingsModal({ data, presetModels, onClose, onUpdateData }: LLMSett
 
   // 使用自定义模型
   const handleCustomModelSubmit = () => {
-    if (customModel.trim()) {
-      onUpdateData({ model: customModel.trim() });
+    const trimmed = customModel.trim();
+    if (trimmed) {
+      addCustomModel("llmContent", trimmed);
+      onUpdateData({ model: trimmed });
       setCustomModel("");
     }
+  };
+
+  // 删除用户自定义模型
+  const handleRemoveCustomModel = (model: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    removeCustomModel("llmContent", model);
   };
 
   return createPortal(
@@ -567,10 +604,10 @@ function LLMSettingsModal({ data, presetModels, onClose, onUpdateData }: LLMSett
         </div>
 
         {/* 内容区域 */}
-        <div className="p-4 space-y-4">
+        <div className="p-4 space-y-4 max-h-[60vh] overflow-y-auto">
           {/* 模型选择 */}
           <div>
-            <label className="text-sm font-medium text-base-content mb-2 block">模型</label>
+            <label className="text-sm font-medium text-base-content mb-2 block">预设模型</label>
             <div className="space-y-1">
               {presetModels.map((opt) => (
                 <button
@@ -591,7 +628,45 @@ function LLMSettingsModal({ data, presetModels, onClose, onUpdateData }: LLMSett
                 </button>
               ))}
             </div>
-            {/* 当前自定义模型显示 */}
+
+            {/* 用户自定义模型列表 */}
+            {customModels.length > 0 && (
+              <div className="mt-3">
+                <label className="text-xs text-base-content/60 mb-1.5 block">我的模型</label>
+                <div className="space-y-1">
+                  {customModels.map((model) => (
+                    <div
+                      key={model}
+                      className={`
+                        w-full px-3 py-2 text-left text-sm rounded-lg
+                        flex items-center justify-between group cursor-pointer
+                        transition-colors
+                        ${data.model === model
+                          ? "bg-info/20 text-info border border-info/30"
+                          : "bg-base-200 hover:bg-base-300"
+                        }
+                      `}
+                      onClick={() => onUpdateData({ model })}
+                    >
+                      <span className="truncate">{model}</span>
+                      <div className="flex items-center gap-1">
+                        {data.model === model && <Check className="w-4 h-4" />}
+                        <button
+                          type="button"
+                          className="p-1 rounded hover:bg-error/20 hover:text-error opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={(e) => handleRemoveCustomModel(model, e)}
+                          title="删除此模型"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 当前自定义模型显示（如果是临时输入的，不在列表中） */}
             {isCustomModel && (
               <div className="mt-2 px-2 py-1.5 bg-primary/10 rounded-lg text-xs text-primary">
                 当前使用自定义模型: {data.model}
@@ -599,7 +674,7 @@ function LLMSettingsModal({ data, presetModels, onClose, onUpdateData }: LLMSett
             )}
             {/* 自定义模型输入 */}
             <div className="mt-3">
-              <label className="text-xs text-base-content/60 mb-1 block">自定义模型</label>
+              <label className="text-xs text-base-content/60 mb-1 block">添加自定义模型</label>
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -619,7 +694,7 @@ function LLMSettingsModal({ data, presetModels, onClose, onUpdateData }: LLMSett
                   onClick={handleCustomModelSubmit}
                   disabled={!customModel.trim()}
                 >
-                  确定
+                  添加
                 </button>
               </div>
             </div>

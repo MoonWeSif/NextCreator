@@ -18,6 +18,7 @@ import {
   LayoutTemplate,
 } from "lucide-react";
 import { useFlowStore } from "@/stores/flowStore";
+import { getImageUrl } from "@/services/fileStorageService";
 import type { PPTContentNodeData, PPTOutline, PPTPageItem, VisualStyleTemplate, ConnectedImageInfo } from "./types";
 import type { ImageInputNodeData } from "@/types";
 import { ConfigTab } from "./ConfigTab";
@@ -106,6 +107,7 @@ export const PPTContentNode = memo(({ id, data, selected }: NodeProps<PPTContent
   }, [id, getConnectedFilesWithInfo]);
 
   // 获取模板基底图（支持多图选择）
+  // 注意：此函数用于同步检查是否有模板图，返回 imageData 或 imagePath
   const getTemplateImage = useCallback(() => {
     const images = getConnectedImages();
     if (images.length === 0) return undefined;
@@ -113,11 +115,12 @@ export const PPTContentNode = memo(({ id, data, selected }: NodeProps<PPTContent
     // 如果有选中的基底图 ID，使用它
     if (data.selectedTemplateId) {
       const selected = images.find(img => img.id === data.selectedTemplateId);
-      if (selected) return selected.imageData;
+      // 返回 imageData 或 imagePath（任一存在即表示有图片）
+      if (selected) return selected.imageData || selected.imagePath;
     }
 
     // 默认使用第一张
-    return images[0]?.imageData;
+    return images[0]?.imageData || images[0]?.imagePath;
   }, [getConnectedImages, data.selectedTemplateId]);
 
   // 选择基底图
@@ -336,24 +339,43 @@ export const PPTContentNode = memo(({ id, data, selected }: NodeProps<PPTContent
           id="input-prompt"
           style={{ top: "15%" }}
           className="!w-3 !h-3 !bg-blue-500 !border-2 !border-white"
-          title="主题描述"
         />
+        {/* prompt 端口标签 */}
+        <div
+          className="absolute -left-6 text-[10px] text-base-content/50 tooltip tooltip-left"
+          style={{ top: "15%", transform: "translateY(-100%)" }}
+          data-tip="支持多个输入，将自动拼接"
+        >
+          主题
+        </div>
         <Handle
           type="target"
           position={Position.Left}
           id="input-image"
           style={{ top: "40%" }}
           className="!w-3 !h-3 !bg-green-500 !border-2 !border-white"
-          title="模板基底图"
         />
+        {/* image 端口标签 */}
+        <div
+          className="absolute -left-9 text-[10px] text-base-content/50"
+          style={{ top: "40%", transform: "translateY(-100%)" }}
+        >
+          模板图
+        </div>
         <Handle
           type="target"
           position={Position.Left}
           id="input-file"
           style={{ top: "65%" }}
           className="!w-3 !h-3 !bg-orange-500 !border-2 !border-white"
-          title="参考文件"
         />
+        {/* file 端口标签 */}
+        <div
+          className="absolute -left-12 text-[10px] text-base-content/50"
+          style={{ top: "65%", transform: "translateY(-100%)" }}
+        >
+          参考文件
+        </div>
 
         {/* 节点头部 */}
         <div className="flex items-center justify-between px-3 py-2 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-t-lg">
@@ -490,7 +512,13 @@ export const PPTContentNode = memo(({ id, data, selected }: NodeProps<PPTContent
                               title={img.fileName || `图片-${img.id.slice(0, 4)}`}
                             >
                               <img
-                                src={`data:image/png;base64,${img.imageData}`}
+                                src={
+                                  img.imagePath
+                                    ? getImageUrl(img.imagePath)
+                                    : img.imageData
+                                      ? `data:image/png;base64,${img.imageData}`
+                                      : undefined
+                                }
                                 alt={img.fileName || "图片"}
                                 className="w-full h-full object-cover"
                               />

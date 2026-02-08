@@ -7,7 +7,6 @@ import {
   deleteCanvasImages,
   listCanvasImages,
   deleteImage,
-  isTauriEnvironment,
   type StorageStats,
   type ImageInfoWithMetadata,
 } from "@/services/fileStorageService";
@@ -19,13 +18,12 @@ interface StorageManagementState {
   // UI 状态
   isOpen: boolean;
   isLoading: boolean;
-  isTauri: boolean;
 
-  // 文件存储数据（桌面端）
+  // 文件存储数据
   fileStats: StorageStats | null;
   storagePath: string | null;
-  expandedFileCanvases: string[]; // 展开的画布（文件存储）
-  canvasImages: Map<string, ImageInfoWithMetadata[]>; // 画布图片详情（包含元数据）
+  expandedFileCanvases: string[];
+  canvasImages: Map<string, ImageInfoWithMetadata[]>;
 
   // 错误信息
   error: string | null;
@@ -48,7 +46,6 @@ export const useStorageManagementStore = create<StorageManagementState>(
   (set, get) => ({
     isOpen: false,
     isLoading: false,
-    isTauri: isTauriEnvironment(),
 
     fileStats: null,
     storagePath: null,
@@ -58,32 +55,22 @@ export const useStorageManagementStore = create<StorageManagementState>(
     error: null,
 
     openModal: async () => {
-      const isTauri = isTauriEnvironment();
       set({
         isOpen: true,
         isLoading: true,
         error: null,
-        isTauri,
       });
 
       try {
-        if (isTauri) {
-          const [fileStats, storagePath] = await Promise.all([
-            getStorageStats(),
-            getStoragePath(),
-          ]);
-          set({
-            fileStats,
-            storagePath,
-            isLoading: false,
-          });
-        } else {
-          // 浏览器环境：显示基本信息
-          set({
-            storagePath: "浏览器 localStorage",
-            isLoading: false,
-          });
-        }
+        const [fileStats, storagePath] = await Promise.all([
+          getStorageStats(),
+          getStoragePath(),
+        ]);
+        set({
+          fileStats,
+          storagePath,
+          isLoading: false,
+        });
       } catch (err) {
         set({
           error: err instanceof Error ? err.message : "获取存储信息失败",
@@ -101,16 +88,11 @@ export const useStorageManagementStore = create<StorageManagementState>(
     },
 
     refreshStats: async () => {
-      const { isTauri } = get();
       set({ isLoading: true, error: null });
 
       try {
-        if (isTauri) {
-          const fileStats = await getStorageStats();
-          set({ fileStats, isLoading: false });
-        } else {
-          set({ isLoading: false });
-        }
+        const fileStats = await getStorageStats();
+        set({ fileStats, isLoading: false });
       } catch (err) {
         set({
           error: err instanceof Error ? err.message : "刷新失败",
@@ -122,8 +104,6 @@ export const useStorageManagementStore = create<StorageManagementState>(
     // === 文件存储操作 ===
 
     handleClearCache: async () => {
-      if (!isTauriEnvironment()) return;
-
       set({ isLoading: true, error: null });
       try {
         await clearCache();
@@ -137,8 +117,6 @@ export const useStorageManagementStore = create<StorageManagementState>(
     },
 
     handleClearAllImages: async () => {
-      if (!isTauriEnvironment()) return;
-
       set({ isLoading: true, error: null });
       try {
         await clearAllImages();
@@ -153,12 +131,9 @@ export const useStorageManagementStore = create<StorageManagementState>(
     },
 
     handleClearCanvasImages: async (canvasId: string) => {
-      if (!isTauriEnvironment()) return;
-
       set({ isLoading: true, error: null });
       try {
         await deleteCanvasImages(canvasId);
-        // 从 canvasImages 中移除
         const newCanvasImages = new Map(get().canvasImages);
         newCanvasImages.delete(canvasId);
         set({ canvasImages: newCanvasImages });
@@ -172,12 +147,9 @@ export const useStorageManagementStore = create<StorageManagementState>(
     },
 
     handleDeleteImage: async (path: string) => {
-      if (!isTauriEnvironment()) return;
-
       set({ isLoading: true, error: null });
       try {
         await deleteImage(path);
-        // 更新 canvasImages 中的数据
         const newCanvasImages = new Map(get().canvasImages);
         for (const [canvasId, images] of newCanvasImages) {
           const filtered = images.filter((img) => img.path !== path);
@@ -218,8 +190,6 @@ export const useStorageManagementStore = create<StorageManagementState>(
     },
 
     loadCanvasImages: async (canvasId: string) => {
-      if (!isTauriEnvironment()) return;
-
       try {
         const images = await listCanvasImages(canvasId);
         const newCanvasImages = new Map(get().canvasImages);

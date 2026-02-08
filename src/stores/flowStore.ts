@@ -868,7 +868,8 @@ export const useFlowStore = create<FlowStore>((set, get) => ({
     const { nodes, edges } = get();
     const incomingEdges = edges.filter((edge) => edge.target === nodeId);
 
-    let prompt: string | undefined;
+    // 支持多个 prompt 输入，收集后拼接
+    const prompts: string[] = [];
     const images: string[] = [];
     const files: Array<{ data: string; mimeType: string; fileName?: string }> = [];
 
@@ -880,14 +881,14 @@ export const useFlowStore = create<FlowStore>((set, get) => ({
       const targetHandle = edge.targetHandle;
 
       if (targetHandle === "input-prompt") {
-        // 从 prompt 输入端口连接的数据
+        // 从 prompt 输入端口连接的数据（支持多个，会自动拼接）
         if (sourceNode.type === "promptNode") {
           const data = sourceNode.data as { prompt?: string };
-          prompt = data.prompt;
+          if (data.prompt) prompts.push(data.prompt);
         } else if (sourceNode.type === "llmContentNode") {
           // 支持从 LLM 内容生成节点获取输出作为 prompt
           const data = sourceNode.data as { outputContent?: string };
-          prompt = data.outputContent;
+          if (data.outputContent) prompts.push(data.outputContent);
         }
       } else if (targetHandle === "input-image") {
         // 从 image 输入端口连接的数据（支持多图）
@@ -924,11 +925,11 @@ export const useFlowStore = create<FlowStore>((set, get) => ({
         // 兼容旧的没有 handle ID 的连接（向后兼容）
         if (sourceNode.type === "promptNode") {
           const data = sourceNode.data as { prompt?: string };
-          prompt = data.prompt;
+          if (data.prompt) prompts.push(data.prompt);
         } else if (sourceNode.type === "llmContentNode") {
           // 支持从 LLM 内容生成节点获取输出作为 prompt
           const data = sourceNode.data as { outputContent?: string };
-          prompt = data.outputContent;
+          if (data.outputContent) prompts.push(data.outputContent);
         } else if (sourceNode.type === "imageInputNode") {
           const data = sourceNode.data as { imageData?: string; imagePath?: string };
           // 同时检查 imageData 和 imagePath
@@ -955,6 +956,8 @@ export const useFlowStore = create<FlowStore>((set, get) => ({
       }
     }
 
+    // 将多个 prompt 拼接成一个字符串，用换行符分隔
+    const prompt = prompts.length > 0 ? prompts.join("\n\n") : undefined;
     return { prompt, images, files };
   },
 
@@ -963,7 +966,8 @@ export const useFlowStore = create<FlowStore>((set, get) => ({
     const { nodes, edges } = get();
     const incomingEdges = edges.filter((edge) => edge.target === nodeId);
 
-    let prompt: string | undefined;
+    // 支持多个 prompt 输入，收集后拼接
+    const prompts: string[] = [];
     const images: string[] = [];
     const files: Array<{ data: string; mimeType: string; fileName?: string }> = [];
 
@@ -974,12 +978,13 @@ export const useFlowStore = create<FlowStore>((set, get) => ({
       const targetHandle = edge.targetHandle;
 
       if (targetHandle === "input-prompt") {
+        // 从 prompt 输入端口连接的数据（支持多个，会自动拼接）
         if (sourceNode.type === "promptNode") {
           const data = sourceNode.data as { prompt?: string };
-          prompt = data.prompt;
+          if (data.prompt) prompts.push(data.prompt);
         } else if (sourceNode.type === "llmContentNode") {
           const data = sourceNode.data as { outputContent?: string };
-          prompt = data.outputContent;
+          if (data.outputContent) prompts.push(data.outputContent);
         }
       } else if (targetHandle === "input-image") {
         // 从 image 输入端口连接的数据 - 按需从文件加载
@@ -1029,10 +1034,10 @@ export const useFlowStore = create<FlowStore>((set, get) => ({
         // 兼容旧的没有 handle ID 的连接
         if (sourceNode.type === "promptNode") {
           const data = sourceNode.data as { prompt?: string };
-          prompt = data.prompt;
+          if (data.prompt) prompts.push(data.prompt);
         } else if (sourceNode.type === "llmContentNode") {
           const data = sourceNode.data as { outputContent?: string };
-          prompt = data.outputContent;
+          if (data.outputContent) prompts.push(data.outputContent);
         } else if (sourceNode.type === "imageInputNode") {
           const data = sourceNode.data as { imageData?: string; imagePath?: string };
           let imageData: string | undefined;
@@ -1078,6 +1083,8 @@ export const useFlowStore = create<FlowStore>((set, get) => ({
       }
     }
 
+    // 将多个 prompt 拼接成一个字符串，用换行符分隔
+    const prompt = prompts.length > 0 ? prompts.join("\n\n") : undefined;
     return { prompt, images, files };
   },
 

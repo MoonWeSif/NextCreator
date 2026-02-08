@@ -234,18 +234,65 @@ export function validateConnection(
   }
 
   // 8. 检查单输入限制
-  // - prompt 输入: 只允许一个连接
+  // - prompt 输入: 允许多个连接（会自动拼接）
   // - image 输入: ImageGenerator 和 PPTContent 允许多个，VideoGenerator 只允许一个
   const isMultiImageAllowed =
     targetNode.type === "imageGeneratorProNode" ||
     targetNode.type === "imageGeneratorFastNode" ||
-    targetNode.type === "pptContentNode";
+    targetNode.type === "pptContentNode" ||
+    targetNode.type === "veoGeneratorNode";
 
   const isImageInput = targetHandle === "input-image" ||
     (!targetHandle && sourceOutputType === "image");
 
+  const isPromptInput = targetHandle === "input-prompt" ||
+    (!targetHandle && sourceOutputType === "prompt");
+
+  // 如果是 prompt 输入，允许多个连接（会自动拼接文本）
+  if (isPromptInput) {
+    return { isValid: true };
+  }
+
   // 如果是允许多图的节点的 image 输入，直接允许连接
   if (isMultiImageAllowed && isImageInput) {
+    // Veo 节点根据模式限制图片数量
+    if (targetNode.type === "veoGeneratorNode") {
+      const targetData = targetNode.data as { generationMode?: string; model?: string };
+      const currentMode = targetData?.generationMode || "text2video";
+      const currentModel = targetData?.model || "veo-3.1-fast-generate-preview";
+
+      if (currentMode === "reference" && currentModel.includes("fast")) {
+        return { isValid: false };
+      }
+
+      let maxImages: number | null = null;
+      if (currentMode === "image2video") {
+        maxImages = 1;
+      } else if (currentMode === "interpolation") {
+        maxImages = 2;
+      } else if (currentMode === "reference") {
+        maxImages = 3;
+      } else if (currentMode === "text2video") {
+        maxImages = 0;
+      }
+
+      if (maxImages !== null) {
+        const existingImageConnections = edges.filter((edge) => {
+          if (edge.target !== target) return false;
+          if (edge.targetHandle === "input-image") return true;
+          if (!edge.targetHandle) {
+            const edgeSourceNode = nodes.find((n) => n.id === edge.source);
+            const edgeSourceType = edgeSourceNode ? getNodeOutputType(edgeSourceNode.type || "") : undefined;
+            return edgeSourceType === "image";
+          }
+          return false;
+        });
+
+        if (existingImageConnections.length >= maxImages) {
+          return { isValid: false };
+        }
+      }
+    }
     return { isValid: true };
   }
 

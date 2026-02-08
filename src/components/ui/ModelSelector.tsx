@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown, X, Check } from "lucide-react";
+import { ChevronDown, X, Check, Trash2 } from "lucide-react";
+import { useCustomModelStore, type ModelCategory } from "@/stores/customModelStore";
 
 export interface ModelOption {
   value: string;
@@ -20,6 +21,8 @@ interface ModelSelectorProps {
   /** 弹窗标题 */
   title?: string;
   className?: string;
+  /** 模型分类，用于保存和读取用户自定义模型 */
+  modelCategory?: ModelCategory;
 }
 
 /**
@@ -35,16 +38,24 @@ export function ModelSelector({
   variant = "primary",
   title = "选择模型",
   className = "",
+  modelCategory,
 }: ModelSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const customModels = useCustomModelStore((state) =>
+    modelCategory ? state.getCustomModels(modelCategory) : []
+  );
 
-  // 检查是否是自定义模型
+  // 检查是否是自定义模型（不在预设列表中）
   const isCustomModel = !options.some((opt) => opt.value === value);
 
-  // 获取显示的模型名称
+  // 获取显示的模型名称（包含真实模型名）
   const getDisplayName = () => {
     const preset = options.find((opt) => opt.value === value);
-    return preset ? preset.label : value;
+    if (preset) {
+      // 如果 label 和 value 相同，只显示一个
+      return preset.label === preset.value ? preset.label : `${preset.label} (${preset.value})`;
+    }
+    return value;
   };
 
   // 打开弹窗
@@ -82,6 +93,8 @@ export function ModelSelector({
           customPlaceholder={customPlaceholder}
           variant={variant}
           title={title}
+          modelCategory={modelCategory}
+          customModels={customModels}
         />
       )}
     </div>
@@ -98,6 +111,8 @@ interface ModelSelectorModalProps {
   customPlaceholder: string;
   variant: "primary" | "warning" | "info";
   title: string;
+  modelCategory?: ModelCategory;
+  customModels: string[];
 }
 
 function ModelSelectorModal({
@@ -109,13 +124,17 @@ function ModelSelectorModal({
   customPlaceholder,
   variant,
   title,
+  modelCategory,
+  customModels,
 }: ModelSelectorModalProps) {
   const [isVisible, setIsVisible] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   const [customModel, setCustomModel] = useState("");
 
-  // 检查是否是自定义模型
-  const isCustomModel = !options.some((opt) => opt.value === value);
+  const { addCustomModel, removeCustomModel } = useCustomModelStore();
+
+  // 检查是否是自定义模型（不在预设列表中，也不在用户自定义列表中）
+  const isCustomModel = !options.some((opt) => opt.value === value) && !customModels.includes(value);
 
   // 进入动画
   useEffect(() => {
@@ -147,8 +166,22 @@ function ModelSelectorModal({
 
   // 使用自定义模型
   const handleCustomModelSubmit = () => {
-    if (customModel.trim()) {
-      onChange(customModel.trim());
+    const trimmed = customModel.trim();
+    if (trimmed) {
+      // 保存到自定义模型列表（如果指定了分类）
+      if (modelCategory) {
+        addCustomModel(modelCategory, trimmed);
+      }
+      onChange(trimmed);
+    }
+  };
+
+  // 删除用户自定义模型
+  const handleRemoveCustomModel = (model: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (modelCategory) {
+      removeCustomModel(modelCategory, model);
+      // 如果删除的是当前选中的模型，不做任何处理，让用户重新选择
     }
   };
 
@@ -220,9 +253,10 @@ function ModelSelectorModal({
         </div>
 
         {/* 内容区域 */}
-        <div className="p-4 space-y-3">
+        <div className="p-4 space-y-3 max-h-[60vh] overflow-y-auto">
           {/* 预设模型列表 */}
           <div className="space-y-1">
+            <label className="text-xs text-base-content/60 mb-1.5 block">预设模型</label>
             {options.map((opt) => (
               <button
                 key={opt.value}
@@ -238,19 +272,59 @@ function ModelSelectorModal({
                 `}
                 onClick={() => handleSelectPreset(opt.value)}
               >
-                <span>{opt.label}</span>
+                <span className="flex flex-col items-start">
+                  <span>{opt.label}</span>
+                  {opt.label !== opt.value && (
+                    <span className="text-xs text-base-content/50">{opt.value}</span>
+                  )}
+                </span>
                 {value === opt.value && <Check className="w-4 h-4" />}
               </button>
             ))}
           </div>
 
+          {/* 用户自定义模型列表 */}
+          {allowCustom && customModels.length > 0 && (
+            <div className="border-t border-base-300 pt-3 space-y-1">
+              <label className="text-xs text-base-content/60 mb-1.5 block">我的模型</label>
+              {customModels.map((model) => (
+                <div
+                  key={model}
+                  className={`
+                    w-full px-3 py-2 text-left text-sm rounded-lg
+                    flex items-center justify-between group
+                    transition-colors cursor-pointer
+                    ${value === model
+                      ? getSelectedBg()
+                      : "bg-base-200 hover:bg-base-300"
+                    }
+                  `}
+                  onClick={() => handleSelectPreset(model)}
+                >
+                  <span className="truncate">{model}</span>
+                  <div className="flex items-center gap-1">
+                    {value === model && <Check className="w-4 h-4" />}
+                    <button
+                      type="button"
+                      className="p-1 rounded hover:bg-error/20 hover:text-error opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={(e) => handleRemoveCustomModel(model, e)}
+                      title="删除此模型"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* 自定义模型输入 */}
           {allowCustom && (
             <>
               <div className="border-t border-base-300 pt-3">
-                <label className="text-xs text-base-content/60 mb-1.5 block">自定义模型</label>
-                {/* 当前自定义模型显示 */}
-                {isCustomModel && (
+                <label className="text-xs text-base-content/60 mb-1.5 block">添加自定义模型</label>
+                {/* 当前自定义模型显示（如果是临时输入的，不在列表中） */}
+                {isCustomModel && value && (
                   <div className="mb-2 px-2 py-1.5 bg-primary/10 rounded-lg text-xs text-primary">
                     当前: {value}
                   </div>
@@ -274,7 +348,7 @@ function ModelSelectorModal({
                     onClick={handleCustomModelSubmit}
                     disabled={!customModel.trim()}
                   >
-                    确定
+                    添加
                   </button>
                 </div>
               </div>

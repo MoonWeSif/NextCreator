@@ -3,8 +3,8 @@ import { Handle, Position, type NodeProps, type Node } from "@xyflow/react";
 import { Sparkles, Zap, Play, AlertCircle, Maximize2, AlertTriangle, CircleAlert } from "lucide-react";
 import { useFlowStore } from "@/stores/flowStore";
 import { useCanvasStore } from "@/stores/canvasStore";
-import { generateImage, editImage } from "@/services/imageService";
-import { saveImage, getImageUrl, isTauriEnvironment, type InputImageInfo } from "@/services/fileStorageService";
+import { generateImage, editImage } from "@/services/imageGeneration";
+import { saveImage, getImageUrl, type InputImageInfo } from "@/services/fileStorageService";
 import { ImagePreviewModal } from "@/components/ui/ImagePreviewModal";
 import { ErrorDetailModal } from "@/components/ui/ErrorDetailModal";
 import { ModelSelector } from "@/components/ui/ModelSelector";
@@ -141,6 +141,7 @@ function ImageGeneratorBase({
       updateNodeDataWithCanvas(id, {
         status: "error",
         error: "请连接提示词节点",
+        errorDetails: undefined,
       });
       return;
     }
@@ -170,8 +171,7 @@ function ImageGeneratorBase({
           }, nodeType);
 
       if (response.imageData) {
-        // 在 Tauri 环境中，将图片保存到文件系统
-        if (isTauriEnvironment() && activeCanvasId) {
+        if (activeCanvasId) {
           try {
             // 1. 先处理输入图片（如果有且未保存到文件系统）
             const connectedImages = getConnectedImagesWithInfo(id);
@@ -239,7 +239,7 @@ function ImageGeneratorBase({
             });
           }
         } else {
-          // 非 Tauri 环境或没有画布 ID，使用 base64 存储
+          // 没有画布 ID，使用 base64 存储
           updateNodeDataWithCanvas(id, {
             status: "success",
             outputImage: response.imageData,
@@ -257,12 +257,14 @@ function ImageGeneratorBase({
         updateNodeDataWithCanvas(id, {
           status: "error",
           error: "未返回图片数据",
+          errorDetails: undefined,
         });
       }
     } catch {
       updateNodeDataWithCanvas(id, {
         status: "error",
         error: "生成失败",
+        errorDetails: undefined,
       });
     }
   }, [id, model, data.aspectRatio, data.imageSize, isPro, updateNodeDataWithCanvas, getConnectedInputDataAsync, getConnectedImagesWithInfo]);
@@ -289,6 +291,14 @@ function ImageGeneratorBase({
           style={{ top: "30%" }}
           className={`!w-3 !h-3 !bg-blue-500 !border-2 !border-white`}
         />
+        {/* prompt 端口标签 */}
+        <div
+          className="absolute -left-9 text-[10px] text-base-content/50 tooltip tooltip-left"
+          style={{ top: "30%", transform: "translateY(-100%)" }}
+          data-tip="支持多个输入，将自动拼接"
+        >
+          提示词
+        </div>
         {/* 输入端口 - image 类型（下方） */}
         <Handle
           type="target"
@@ -297,6 +307,13 @@ function ImageGeneratorBase({
           style={{ top: "70%" }}
           className={`!w-3 !h-3 !bg-green-500 !border-2 !border-white`}
         />
+        {/* image 端口标签 */}
+        <div
+          className="absolute -left-9 text-[10px] text-base-content/50"
+          style={{ top: "70%", transform: "translateY(-100%)" }}
+        >
+          参考图
+        </div>
 
         {/* 节点头部 */}
         <div className={`flex items-center justify-between px-3 py-2 ${headerGradient} rounded-t-lg`}>
@@ -336,6 +353,7 @@ function ImageGeneratorBase({
             onChange={handleModelChange}
             variant={isPro ? "primary" : "warning"}
             allowCustom={true}
+            modelCategory="imageGenerator"
           />
 
           {/* 配置选项 */}

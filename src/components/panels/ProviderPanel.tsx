@@ -5,6 +5,7 @@ import { useSettingsStore } from "@/stores/settingsStore";
 import { Select } from "@/components/ui/Select";
 import { Input } from "@/components/ui/Input";
 import { useModal, getModalAnimationClasses } from "@/hooks/useModal";
+import { NODE_ALLOWED_PROTOCOLS } from "@/types";
 import type { Provider, NodeProviderMapping, ProviderProtocol } from "@/types";
 
 // 协议类型配置
@@ -27,7 +28,14 @@ const protocolLabels: Record<ProviderProtocol, string> = {
 const nodeTypeConfig: { key: keyof NodeProviderMapping; label: string; description: string }[] = [
   { key: "imageGeneratorPro", label: "NanoBanana Pro", description: "高质量图片生成 / PPT 页面图片生成" },
   { key: "imageGeneratorFast", label: "NanoBanana", description: "快速图片生成节点" },
+  { key: "dalleGenerator", label: "DALL-E 绘图", description: "OpenAI DALL-E 图片生成节点" },
+  { key: "fluxGenerator", label: "Flux 绘图", description: "Flux 图片生成节点" },
+  { key: "gptImageGenerator", label: "GPT Image 绘图", description: "OpenAI GPT Image 图片生成节点" },
+  { key: "doubaoGenerator", label: "豆包绘图", description: "字节跳动豆包图片生成节点" },
+  { key: "zImageGenerator", label: "Z-Image 绘图", description: "Gitee AI Z-Image 图片生成节点" },
   { key: "videoGenerator", label: "视频生成", description: "Sora 视频生成节点" },
+  { key: "veoGenerator", label: "Veo 视频生成", description: "Gemini Veo 视频生成节点" },
+  { key: "klingGenerator", label: "Kling 视频生成", description: "Kling 视频生成节点" },
   { key: "llmContent", label: "LLM 内容生成", description: "大语言模型内容生成节点" },
   { key: "llm", label: "PPT 大纲生成", description: "PPT 内容节点的大纲生成部分" },
 ];
@@ -224,10 +232,12 @@ export function ProviderPanel() {
                       placeholder="未配置"
                       options={[
                         { value: "", label: "未配置" },
-                        ...providers.map((provider) => ({
-                          value: provider.id,
-                          label: `${provider.name} (${protocolLabels[provider.protocol] || "Google"})`,
-                        })),
+                        ...providers
+                          .filter((p) => NODE_ALLOWED_PROTOCOLS[key].includes(p.protocol))
+                          .map((provider) => ({
+                            value: provider.id,
+                            label: `${provider.name} (${protocolLabels[provider.protocol] || "Google"})`,
+                          })),
                       ]}
                       onChange={(value) =>
                         setLocalNodeProviders({

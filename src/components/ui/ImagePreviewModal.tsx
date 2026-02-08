@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { X, Download, ZoomIn, ZoomOut, Loader2 } from "lucide-react";
-import { getImageUrl, isTauriEnvironment, readImage } from "@/services/fileStorageService";
+import { getImageUrl, readImage } from "@/services/fileStorageService";
 import { toast } from "@/stores/toastStore";
 
 interface ImagePreviewModalProps {
@@ -65,36 +65,23 @@ export function ImagePreviewModal({ imageData, imagePath, onClose, fileName }: I
 
       const defaultFileName = fileName || `next-creator-${Date.now()}.png`;
 
-      if (isTauriEnvironment()) {
-        // Tauri 环境：使用保存对话框
-        const { save } = await import("@tauri-apps/plugin-dialog");
-        const { writeFile } = await import("@tauri-apps/plugin-fs");
+      const { save } = await import("@tauri-apps/plugin-dialog");
+      const { writeFile } = await import("@tauri-apps/plugin-fs");
 
-        const filePath = await save({
-          defaultPath: defaultFileName,
-          filters: [{ name: "图片", extensions: ["png", "jpg", "jpeg", "webp"] }],
-        });
+      const filePath = await save({
+        defaultPath: defaultFileName,
+        filters: [{ name: "图片", extensions: ["png", "jpg", "jpeg", "webp"] }],
+      });
 
-        if (filePath) {
-          // 将 base64 转换为 Uint8Array
-          const binaryString = atob(base64Data);
-          const bytes = new Uint8Array(binaryString.length);
-          for (let i = 0; i < binaryString.length; i++) {
-            bytes[i] = binaryString.charCodeAt(i);
-          }
-
-          await writeFile(filePath, bytes);
-          toast.success(`图片已保存到: ${filePath.split("/").pop()}`);
+      if (filePath) {
+        const binaryString = atob(base64Data);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
         }
-      } else {
-        // 浏览器环境：使用传统下载
-        const link = document.createElement("a");
-        link.href = `data:image/png;base64,${base64Data}`;
-        link.download = defaultFileName;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        toast.success("图片下载已开始");
+
+        await writeFile(filePath, bytes);
+        toast.success(`图片已保存到: ${filePath.split("/").pop()}`);
       }
     } catch (error) {
       console.error("下载失败:", error);

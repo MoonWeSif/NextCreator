@@ -107,10 +107,15 @@ pub async fn gemini_generate_content(params: GeminiRequestParams) -> GeminiResul
     println!("[Rust] gemini_generate_content called");
     println!("[Rust] base_url: {}", params.base_url);
     println!("[Rust] model: {}", params.model);
-    println!("[Rust] input_images count: {}", params.input_images.as_ref().map(|v| v.len()).unwrap_or(0));
+    println!(
+        "[Rust] input_images count: {}",
+        params.input_images.as_ref().map(|v| v.len()).unwrap_or(0)
+    );
 
     // 构建请求体
-    let mut parts: Vec<Part> = vec![Part::Text { text: params.prompt }];
+    let mut parts: Vec<Part> = vec![Part::Text {
+        text: params.prompt,
+    }];
 
     // 添加输入图片
     if let Some(images) = params.input_images {
@@ -138,19 +143,20 @@ pub async fn gemini_generate_content(params: GeminiRequestParams) -> GeminiResul
 
     // 构建 URL
     let url = format!(
-        "{}/models/{}:generateContent?key={}",
+        "{}/v1beta/models/{}:generateContent?key={}",
         params.base_url.trim_end_matches('/'),
         params.model,
         params.api_key
     );
-    println!("[Rust] Request URL (without key): {}/models/{}:generateContent", params.base_url.trim_end_matches('/'), params.model);
+    println!(
+        "[Rust] Request URL (without key): {}/v1beta/models/{}:generateContent",
+        params.base_url.trim_end_matches('/'),
+        params.model
+    );
 
     // 创建 HTTP 客户端，设置较长的超时时间（10分钟）
     println!("[Rust] Creating HTTP client with 600s timeout...");
-    let client = match Client::builder()
-        .timeout(Duration::from_secs(600))
-        .build()
-    {
+    let client = match Client::builder().timeout(Duration::from_secs(600)).build() {
         Ok(c) => c,
         Err(e) => {
             println!("[Rust] Failed to create HTTP client: {}", e);
@@ -159,7 +165,7 @@ pub async fn gemini_generate_content(params: GeminiRequestParams) -> GeminiResul
                 image_data: None,
                 text: None,
                 error: Some(format!("创建 HTTP 客户端失败: {}", e)),
-            }
+            };
         }
     };
 
@@ -177,9 +183,13 @@ pub async fn gemini_generate_content(params: GeminiRequestParams) -> GeminiResul
         Ok(r) => {
             println!("[Rust] Response received in {:?}", start_time.elapsed());
             r
-        },
+        }
         Err(e) => {
-            println!("[Rust] Request failed after {:?}: {}", start_time.elapsed(), e);
+            println!(
+                "[Rust] Request failed after {:?}: {}",
+                start_time.elapsed(),
+                e
+            );
             let error_msg = if e.is_timeout() {
                 "请求超时，请稍后重试".to_string()
             } else if e.is_connect() {
@@ -240,7 +250,11 @@ pub async fn gemini_generate_content(params: GeminiRequestParams) -> GeminiResul
         Ok(r) => r,
         Err(e) => {
             println!("[Rust] Failed to parse JSON: {}", e);
-            println!("[Rust] JSON error location: line {}, column {}", e.line(), e.column());
+            println!(
+                "[Rust] JSON error location: line {}, column {}",
+                e.line(),
+                e.column()
+            );
             return GeminiResult {
                 success: false,
                 image_data: None,
@@ -282,7 +296,11 @@ pub async fn gemini_generate_content(params: GeminiRequestParams) -> GeminiResul
         }
     }
 
-    println!("[Rust] Result: has_image={}, has_text={}", image_data.is_some(), text.is_some());
+    println!(
+        "[Rust] Result: has_image={}, has_text={}",
+        image_data.is_some(),
+        text.is_some()
+    );
 
     if image_data.is_none() && text.is_none() {
         return GeminiResult {
@@ -305,8 +323,8 @@ pub async fn gemini_generate_content(params: GeminiRequestParams) -> GeminiResul
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FileData {
-    pub data: String,      // base64 编码的文件数据
-    pub mime_type: String, // 文件MIME类型
+    pub data: String,              // base64 编码的文件数据
+    pub mime_type: String,         // 文件MIME类型
     pub file_name: Option<String>, // 文件名（可选）
 }
 
@@ -363,7 +381,10 @@ pub async fn gemini_generate_text(params: LLMRequestParams) -> LLMResult {
     println!("[Rust] gemini_generate_text called");
     println!("[Rust] base_url: {}", params.base_url);
     println!("[Rust] model: {}", params.model);
-    println!("[Rust] files count: {}", params.files.as_ref().map(|v| v.len()).unwrap_or(0));
+    println!(
+        "[Rust] files count: {}",
+        params.files.as_ref().map(|v| v.len()).unwrap_or(0)
+    );
 
     // 构建请求内容
     let prompt_text = if let Some(system_prompt) = &params.system_prompt {
@@ -383,7 +404,10 @@ pub async fn gemini_generate_text(params: LLMRequestParams) -> LLMResult {
     if let Some(files) = &params.files {
         println!("[Rust] Adding {} files to request", files.len());
         for file in files {
-            println!("[Rust] Adding file: mime_type={}, name={:?}", file.mime_type, file.file_name);
+            println!(
+                "[Rust] Adding file: mime_type={}, name={:?}",
+                file.mime_type, file.file_name
+            );
             parts.push(Part::InlineData {
                 inline_data: InlineData {
                     mime_type: file.mime_type.clone(),
@@ -396,7 +420,9 @@ pub async fn gemini_generate_text(params: LLMRequestParams) -> LLMResult {
     let request_body = LLMRequest {
         contents: vec![Content { parts }],
         generation_config: Some(LLMGenerationConfig {
-            response_mime_type: if params.response_json_schema.is_some() || params.output_format.as_deref() == Some("json") {
+            response_mime_type: if params.response_json_schema.is_some()
+                || params.output_format.as_deref() == Some("json")
+            {
                 Some("application/json".to_string())
             } else {
                 None
@@ -409,18 +435,19 @@ pub async fn gemini_generate_text(params: LLMRequestParams) -> LLMResult {
 
     // 构建 URL
     let url = format!(
-        "{}/models/{}:generateContent?key={}",
+        "{}/v1beta/models/{}:generateContent?key={}",
         params.base_url.trim_end_matches('/'),
         params.model,
         params.api_key
     );
-    println!("[Rust] Request URL (without key): {}/models/{}:generateContent", params.base_url.trim_end_matches('/'), params.model);
+    println!(
+        "[Rust] Request URL (without key): {}/v1beta/models/{}:generateContent",
+        params.base_url.trim_end_matches('/'),
+        params.model
+    );
 
     // 创建 HTTP 客户端
-    let client = match Client::builder()
-        .timeout(Duration::from_secs(300))
-        .build()
-    {
+    let client = match Client::builder().timeout(Duration::from_secs(300)).build() {
         Ok(c) => c,
         Err(e) => {
             return LLMResult {
@@ -445,7 +472,7 @@ pub async fn gemini_generate_text(params: LLMRequestParams) -> LLMResult {
         Ok(r) => {
             println!("[Rust] LLM response received in {:?}", start_time.elapsed());
             r
-        },
+        }
         Err(e) => {
             println!("[Rust] LLM request failed: {}", e);
             let error_msg = if e.is_timeout() {
@@ -536,7 +563,10 @@ pub async fn gemini_generate_text(params: LLMRequestParams) -> LLMResult {
         };
     }
 
-    println!("[Rust] LLM result: content length = {}", content.as_ref().map(|c| c.len()).unwrap_or(0));
+    println!(
+        "[Rust] LLM result: content length = {}",
+        content.as_ref().map(|c| c.len()).unwrap_or(0)
+    );
 
     LLMResult {
         success: true,

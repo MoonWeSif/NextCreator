@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import {
   LayoutGrid,
@@ -15,9 +15,11 @@ import {
   BookText,
   Eye,
   User,
+  Heart,
 } from "lucide-react";
 import { useCanvasStore, type SidebarView } from "@/stores/canvasStore";
 import { useUserPromptStore, type UserPrompt, type CreatePromptInput } from "@/stores/userPromptStore";
+import { useFavoritePromptStore } from "@/stores/favoritePromptStore";
 import { nodeCategories, nodeIconMap, nodeIconColors } from "@/config/nodeConfig";
 import { promptCategories, promptIconMap, promptIconColors, type PromptItem } from "@/config/promptConfig";
 import { Input } from "@/components/ui/Input";
@@ -63,17 +65,32 @@ export function Sidebar({ onDragStart }: SidebarProps) {
 
   // 提示词面板相关状态
   const [promptSearchQuery, setPromptSearchQuery] = useState("");
+  // 提示词分类默认收起
   const [expandedPromptCategories, setExpandedPromptCategories] = useState<Set<string>>(
-    new Set(promptCategories.map((c) => c.id))
+    new Set()
   );
   const [previewPrompt, setPreviewPrompt] = useState<PromptItem | null>(null);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
 
   // 用户自定义提示词
   const { prompts: userPrompts, addPrompt, updatePrompt, deletePrompt } = useUserPromptStore();
-  const [isUserPromptsExpanded, setIsUserPromptsExpanded] = useState(true);
+  // 用户提示词默认收起
+  const [isUserPromptsExpanded, setIsUserPromptsExpanded] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingUserPrompt, setEditingUserPrompt] = useState<UserPrompt | null>(null);
+
+  // 收藏功能
+  const { favoriteIds, removeFavorite } = useFavoritePromptStore();
+  const [isFavoritesExpanded, setIsFavoritesExpanded] = useState(false);
+
+  // 获取所有收藏的提示词
+  const favoritePrompts = useMemo(() => {
+    const allPrompts: PromptItem[] = [];
+    promptCategories.forEach((category) => {
+      allPrompts.push(...category.prompts);
+    });
+    return allPrompts.filter((p) => favoriteIds.has(p.id));
+  }, [favoriteIds]);
 
   // 点击外部关闭菜单
   useEffect(() => {
@@ -576,6 +593,96 @@ export function Sidebar({ onDragStart }: SidebarProps) {
                                   title="删除"
                                 >
                                   <Trash2 className="w-3 h-3" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 我的收藏 */}
+              {favoritePrompts.length > 0 && (
+                <div className="mb-2">
+                  <button
+                    className="flex items-center gap-2 w-full px-2 py-1.5 text-sm font-medium text-base-content/70 hover:text-base-content hover:bg-base-200 rounded-lg transition-colors"
+                    onClick={() => setIsFavoritesExpanded(!isFavoritesExpanded)}
+                  >
+                    <ChevronRight
+                      className={`w-4 h-4 transition-transform duration-200 ${
+                        isFavoritesExpanded ? "rotate-90" : ""
+                      }`}
+                    />
+                    <div className="p-1 rounded bg-error/10 text-error">
+                      <Heart className="w-3 h-3" />
+                    </div>
+                    <span className="truncate">我的收藏</span>
+                    <span className="text-xs text-base-content/40 ml-auto">
+                      {favoritePrompts.length}
+                    </span>
+                  </button>
+
+                  <div
+                    className={`grid transition-[grid-template-rows] duration-200 ease-out ${
+                      isFavoritesExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                    }`}
+                  >
+                    <div className="overflow-hidden">
+                      <div className="mt-1 space-y-1">
+                        {favoritePrompts
+                          .filter(
+                            (p) =>
+                              !promptSearchQuery ||
+                              p.title.toLowerCase().includes(promptSearchQuery.toLowerCase()) ||
+                              p.prompt.toLowerCase().includes(promptSearchQuery.toLowerCase())
+                          )
+                          .map((prompt) => (
+                            <div
+                              key={prompt.id}
+                              className="draggable-prompt relative flex items-start gap-2 px-2 py-2 bg-base-200/50 hover:bg-base-200 rounded-lg transition-colors group cursor-grab"
+                              draggable
+                              onDragStart={(e) => {
+                                e.dataTransfer.setData(
+                                  "application/reactflow/prompt-template",
+                                  JSON.stringify({
+                                    promptText: prompt.prompt,
+                                    template: prompt.nodeTemplate,
+                                  })
+                                );
+                                e.dataTransfer.effectAllowed = "move";
+                              }}
+                            >
+                              <GripVertical className="w-3 h-3 mt-1 text-base-content/30 group-hover:text-base-content/50 flex-shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium truncate">{prompt.title}</div>
+                                <div className="text-xs text-base-content/50 truncate">
+                                  {prompt.description}
+                                </div>
+                              </div>
+                              {/* 操作按钮 */}
+                              <div className="flex items-center gap-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button
+                                  className="btn btn-ghost btn-xs btn-circle"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setPreviewPrompt(prompt);
+                                    setIsPreviewModalOpen(true);
+                                  }}
+                                  title="预览"
+                                >
+                                  <Eye className="w-3 h-3" />
+                                </button>
+                                <button
+                                  className="btn btn-ghost btn-xs btn-circle text-error"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    removeFavorite(prompt.id);
+                                  }}
+                                  title="取消收藏"
+                                >
+                                  <Heart className="w-3 h-3 fill-current" />
                                 </button>
                               </div>
                             </div>

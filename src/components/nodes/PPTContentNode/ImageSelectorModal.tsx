@@ -2,6 +2,7 @@ import { memo, useState, useCallback, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { X, Check, Image } from "lucide-react";
 import type { ConnectedImageInfo } from "./types";
+import { getImageUrl } from "@/services/fileStorageService";
 
 interface ImageSelectorModalProps {
   images: ConnectedImageInfo[];
@@ -118,10 +119,16 @@ export const ImageSelectorModal = memo(({
                     `}
                     onClick={() => toggleSelection(img.id)}
                   >
-                    {/* 图片 */}
+                    {/* 图片 - 优先使用 imagePath，否则使用 imageData */}
                     <div className="aspect-video bg-base-200">
                       <img
-                        src={`data:image/png;base64,${img.imageData}`}
+                        src={
+                          img.imagePath
+                            ? getImageUrl(img.imagePath)
+                            : img.imageData
+                              ? `data:image/png;base64,${img.imageData}`
+                              : undefined
+                        }
                         alt={img.fileName || "图片"}
                         className="w-full h-full object-cover"
                       />

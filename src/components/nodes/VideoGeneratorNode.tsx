@@ -1,13 +1,14 @@
 import { memo, useCallback, useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Handle, Position, type NodeProps, type Node } from "@xyflow/react";
-import { Video, Play, AlertCircle, Square, Download, CheckCircle2, Eye, X, Settings2, Link2Off, Loader2, AlertTriangle, CircleAlert } from "lucide-react";
+import { Video, Play, AlertCircle, Square, Download, CheckCircle2, Eye, X, Settings2, Link2Off, Loader2, AlertTriangle, CircleAlert, Trash2, Check } from "lucide-react";
 import { useFlowStore } from "@/stores/flowStore";
 import { useCanvasStore } from "@/stores/canvasStore";
-import { createVideoTask, getVideoContentBlobUrl, downloadVideo, type VideoTaskStage } from "@/services/videoService";
+import { createVideoTask, getVideoContentBlobUrl, downloadVideo, type VideoTaskStage } from "@/services/videoGeneration";
 import { taskManager } from "@/services/taskManager";
 import { useLoadingDots } from "@/hooks/useLoadingDots";
 import { ErrorDetailModal } from "@/components/ui/ErrorDetailModal";
+import { useCustomModelStore } from "@/stores/customModelStore";
 import type { VideoGeneratorNodeData, VideoModelType, VideoSizeType } from "@/types";
 
 // 定义节点类型
@@ -135,6 +136,7 @@ export const VideoGeneratorNode = memo(({ id, data, selected }: NodeProps<VideoG
       updateNodeData<VideoGeneratorNodeData>(id, {
         status: "error",
         error: "请连接提示词节点",
+        errorDetails: undefined,
       });
       return;
     }
@@ -143,6 +145,7 @@ export const VideoGeneratorNode = memo(({ id, data, selected }: NodeProps<VideoG
       updateNodeData<VideoGeneratorNodeData>(id, {
         status: "error",
         error: "画布未初始化",
+        errorDetails: undefined,
       });
       return;
     }
@@ -194,6 +197,7 @@ export const VideoGeneratorNode = memo(({ id, data, selected }: NodeProps<VideoG
       updateNodeData<VideoGeneratorNodeData>(id, {
         status: "error",
         error: "生成失败",
+        errorDetails: undefined,
         taskStage: "failed",
       });
     }
@@ -263,6 +267,14 @@ export const VideoGeneratorNode = memo(({ id, data, selected }: NodeProps<VideoG
           style={{ top: "30%" }}
           className="!w-3 !h-3 !bg-blue-500 !border-2 !border-white"
         />
+        {/* prompt 端口标签 */}
+        <div
+          className="absolute -left-9 text-[10px] text-base-content/50 tooltip tooltip-left"
+          style={{ top: "30%", transform: "translateY(-100%)" }}
+          data-tip="支持多个输入，将自动拼接"
+        >
+          提示词
+        </div>
         {/* 输入端口 - image 类型（下方） */}
         <Handle
           type="target"
@@ -271,6 +283,13 @@ export const VideoGeneratorNode = memo(({ id, data, selected }: NodeProps<VideoG
           style={{ top: "70%" }}
           className="!w-3 !h-3 !bg-green-500 !border-2 !border-white"
         />
+        {/* image 端口标签 */}
+        <div
+          className="absolute -left-9 text-[10px] text-base-content/50"
+          style={{ top: "70%", transform: "translateY(-100%)" }}
+        >
+          首帧图
+        </div>
 
         {/* 节点头部 */}
         <div className={`flex items-center justify-between px-3 py-2 ${headerGradient} rounded-t-lg`}>
@@ -474,18 +493,29 @@ function VideoDetailModal({ data, onClose, onUpdateData }: VideoDetailModalProps
   const [isClosing, setIsClosing] = useState(false);
   const [customModel, setCustomModel] = useState("");
 
+  const { addCustomModel, removeCustomModel, getCustomModels } = useCustomModelStore();
+  const customModels = getCustomModels("videoGenerator");
+
   const currentModel = data.model || "sora-2";
   const secondsOptions = getSecondsOptions(currentModel);
 
-  // 检查是否是自定义模型
-  const isCustomModel = !presetModels.some((m) => m.value === currentModel);
+  // 检查是否是自定义模型（不在预设列表和用户自定义列表中）
+  const isCustomModel = !presetModels.some((m) => m.value === currentModel) && !customModels.includes(currentModel);
 
   // 使用自定义模型
   const handleCustomModelSubmit = () => {
-    if (customModel.trim()) {
-      onUpdateData({ model: customModel.trim() as VideoModelType });
+    const trimmed = customModel.trim();
+    if (trimmed) {
+      addCustomModel("videoGenerator", trimmed);
+      onUpdateData({ model: trimmed as VideoModelType });
       setCustomModel("");
     }
+  };
+
+  // 删除用户自定义模型
+  const handleRemoveCustomModel = (model: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    removeCustomModel("videoGenerator", model);
   };
 
   // 进入动画
@@ -552,7 +582,7 @@ function VideoDetailModal({ data, onClose, onUpdateData }: VideoDetailModalProps
         <div className="p-4 space-y-4">
           {/* 模型选择 */}
           <div>
-            <label className="text-sm font-medium text-base-content mb-2 block">模型</label>
+            <label className="text-sm font-medium text-base-content mb-2 block">预设模型</label>
             <div className="flex gap-2">
               {modelOptions.map((opt) => (
                 <button
@@ -571,7 +601,45 @@ function VideoDetailModal({ data, onClose, onUpdateData }: VideoDetailModalProps
                 </button>
               ))}
             </div>
-            {/* 自定义模型显示 */}
+
+            {/* 用户自定义模型列表 */}
+            {customModels.length > 0 && (
+              <div className="mt-3">
+                <label className="text-xs text-base-content/60 mb-1.5 block">我的模型</label>
+                <div className="space-y-1">
+                  {customModels.map((model) => (
+                    <div
+                      key={model}
+                      className={`
+                        w-full px-3 py-2 text-left text-sm rounded-lg
+                        flex items-center justify-between group cursor-pointer
+                        transition-colors
+                        ${currentModel === model
+                          ? "bg-info/20 text-info border border-info/30"
+                          : "bg-base-200 hover:bg-base-300"
+                        }
+                      `}
+                      onClick={() => onUpdateData({ model: model as VideoModelType })}
+                    >
+                      <span className="truncate">{model}</span>
+                      <div className="flex items-center gap-1">
+                        {currentModel === model && <Check className="w-4 h-4" />}
+                        <button
+                          type="button"
+                          className="p-1 rounded hover:bg-error/20 hover:text-error opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={(e) => handleRemoveCustomModel(model, e)}
+                          title="删除此模型"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 当前自定义模型显示（如果是临时输入的，不在列表中） */}
             {isCustomModel && (
               <div className="mt-2 px-2 py-1.5 bg-primary/10 rounded-lg text-xs text-primary">
                 当前使用自定义模型: {currentModel}
@@ -579,7 +647,7 @@ function VideoDetailModal({ data, onClose, onUpdateData }: VideoDetailModalProps
             )}
             {/* 自定义模型输入 */}
             <div className="mt-3">
-              <label className="text-xs text-base-content/60 mb-1 block">自定义模型</label>
+              <label className="text-xs text-base-content/60 mb-1 block">添加自定义模型</label>
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -599,7 +667,7 @@ function VideoDetailModal({ data, onClose, onUpdateData }: VideoDetailModalProps
                   onClick={handleCustomModelSubmit}
                   disabled={!customModel.trim()}
                 >
-                  确定
+                  添加
                 </button>
               </div>
             </div>
