@@ -219,7 +219,7 @@ export function usePPTContentExecution({
         });
       }
     },
-    [data.outlineConfig, update]
+    [data.outlineConfig, data.outlineModel, update]
   );
 
   // 更新大纲（用户编辑后）

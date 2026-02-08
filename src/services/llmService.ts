@@ -265,9 +265,47 @@ export async function generateLLMContent(params: LLMGenerationParams): Promise<L
 }
 
 // 验证 JSON 输出
+function extractJsonCandidate(content: string): string | null {
+  const trimmed = content.trim();
+  if (!trimmed) return null;
+
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    return trimmed;
+  }
+
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (fenced && fenced[1]) {
+    return fenced[1].trim();
+  }
+
+  const jsonPrefix = trimmed.match(/^json\s*[\r\n]+([\s\S]*)$/i);
+  if (jsonPrefix && jsonPrefix[1]) {
+    return jsonPrefix[1].trim();
+  }
+
+  const firstBrace = trimmed.indexOf("{");
+  const lastBrace = trimmed.lastIndexOf("}");
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    return trimmed.slice(firstBrace, lastBrace + 1);
+  }
+
+  const firstBracket = trimmed.indexOf("[");
+  const lastBracket = trimmed.lastIndexOf("]");
+  if (firstBracket !== -1 && lastBracket !== -1 && lastBracket > firstBracket) {
+    return trimmed.slice(firstBracket, lastBracket + 1);
+  }
+
+  return null;
+}
+
 export function validateJsonOutput(content: string): { valid: boolean; data?: unknown; error?: string } {
+  const candidate = extractJsonCandidate(content);
+  if (!candidate) {
+    return { valid: false, error: "输出不是有效的 JSON 格式" };
+  }
+
   try {
-    const data = JSON.parse(content);
+    const data = JSON.parse(candidate);
     return { valid: true, data };
   } catch {
     return { valid: false, error: "输出不是有效的 JSON 格式" };

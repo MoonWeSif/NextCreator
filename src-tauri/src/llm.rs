@@ -91,6 +91,7 @@ struct OpenAIResponseFormat {
 struct OpenAIJsonSchema {
     name: String,
     schema: serde_json::Value,
+    strict: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -112,6 +113,174 @@ struct OpenAIMessageResponse {
 #[derive(Debug, Deserialize)]
 struct OpenAIError {
     message: String,
+}
+
+// ==================== OpenAI Structured Output Helpers ====================
+
+#[derive(Debug, Clone, Copy)]
+enum OpenAIStructuredOutputMode {
+    JsonSchema,
+    JsonObject,
+}
+
+fn is_openai_json_schema_supported(model: &str) -> bool {
+    let _ = model;
+    true
+}
+
+fn is_date_gte(date: &str, min: &str) -> bool {
+    let parse = |s: &str| -> Option<(i32, i32, i32)> {
+        let parts: Vec<&str> = s.split('-').collect();
+        if parts.len() != 3 {
+            return None;
+        }
+        let y = parts[0].parse::<i32>().ok()?;
+        let m = parts[1].parse::<i32>().ok()?;
+        let d = parts[2].parse::<i32>().ok()?;
+        Some((y, m, d))
+    };
+    match (parse(date), parse(min)) {
+        (Some(a), Some(b)) => a >= b,
+        _ => false,
+    }
+}
+
+fn select_openai_structured_output_mode(model: &str) -> OpenAIStructuredOutputMode {
+    if is_openai_json_schema_supported(model) {
+        OpenAIStructuredOutputMode::JsonSchema
+    } else {
+        OpenAIStructuredOutputMode::JsonObject
+    }
+}
+
+fn schema_allows_null(schema: &serde_json::Value) -> bool {
+    match schema {
+        serde_json::Value::Object(map) => {
+            if let Some(t) = map.get("type") {
+                match t {
+                    serde_json::Value::String(s) => s == "null",
+                    serde_json::Value::Array(arr) => arr.iter().any(|v| v.as_str() == Some("null")),
+                    _ => false,
+                }
+            } else if let Some(any_of) = map.get("anyOf") {
+                any_of.as_array().map(|arr| arr.iter().any(schema_allows_null)).unwrap_or(false)
+            } else {
+                false
+            }
+        }
+        _ => false,
+    }
+}
+
+fn make_nullable(schema: serde_json::Value) -> serde_json::Value {
+    if schema_allows_null(&schema) {
+        return schema;
+    }
+    match schema {
+        serde_json::Value::Object(mut map) => {
+            if let Some(t) = map.get_mut("type") {
+                match t {
+                    serde_json::Value::String(s) => {
+                        let mut types = vec![
+                            serde_json::Value::String(s.clone()),
+                            serde_json::Value::String("null".to_string()),
+                        ];
+                        *t = serde_json::Value::Array(types.drain(..).collect());
+                        return serde_json::Value::Object(map);
+                    }
+                    serde_json::Value::Array(arr) => {
+                        if !arr.iter().any(|v| v.as_str() == Some("null")) {
+                            arr.push(serde_json::Value::String("null".to_string()));
+                        }
+                        return serde_json::Value::Object(map);
+                    }
+                    _ => {}
+                }
+            }
+            serde_json::Value::Object(map)
+        }
+        other => serde_json::json!({ "anyOf": [other, { "type": "null" }] }),
+    }
+}
+
+fn normalize_schema_for_openai(schema: &serde_json::Value) -> serde_json::Value {
+    match schema {
+        serde_json::Value::Object(map) => {
+            let mut new_map = map.clone();
+
+            if let Some(any_of) = map.get("anyOf") {
+                if let Some(arr) = any_of.as_array() {
+                    let normalized_any_of: Vec<serde_json::Value> = arr
+                        .iter()
+                        .map(normalize_schema_for_openai)
+                        .collect();
+                    new_map.insert("anyOf".to_string(), serde_json::Value::Array(normalized_any_of));
+                }
+            }
+
+            if let Some(items) = map.get("items") {
+                new_map.insert("items".to_string(), normalize_schema_for_openai(items));
+            }
+
+            if let Some(defs) = map.get("$defs").and_then(|v| v.as_object()) {
+                let mut new_defs = serde_json::Map::new();
+                for (name, def_schema) in defs.iter() {
+                    new_defs.insert(name.clone(), normalize_schema_for_openai(def_schema));
+                }
+                new_map.insert("$defs".to_string(), serde_json::Value::Object(new_defs));
+            }
+
+            if let Some(defs) = map.get("definitions").and_then(|v| v.as_object()) {
+                let mut new_defs = serde_json::Map::new();
+                for (name, def_schema) in defs.iter() {
+                    new_defs.insert(name.clone(), normalize_schema_for_openai(def_schema));
+                }
+                new_map.insert("definitions".to_string(), serde_json::Value::Object(new_defs));
+            }
+
+            if map.get("type").and_then(|v| v.as_str()) == Some("object") || map.contains_key("properties") {
+                if let Some(props) = map.get("properties").and_then(|v| v.as_object()) {
+                    let required: Vec<String> = map
+                        .get("required")
+                        .and_then(|v| v.as_array())
+                        .map(|arr| {
+                            arr.iter()
+                                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    let required_set: std::collections::HashSet<String> = required.into_iter().collect();
+
+                    let mut new_props = serde_json::Map::new();
+                    for (name, prop_schema) in props.iter() {
+                        let normalized = normalize_schema_for_openai(prop_schema);
+                        let final_schema = if required_set.contains(name) {
+                            normalized
+                        } else {
+                            make_nullable(normalized)
+                        };
+                        new_props.insert(name.clone(), final_schema);
+                    }
+
+                    let required_all: Vec<serde_json::Value> = new_props
+                        .keys()
+                        .map(|k| serde_json::Value::String(k.clone()))
+                        .collect();
+
+                    new_map.insert("properties".to_string(), serde_json::Value::Object(new_props));
+                    new_map.insert("required".to_string(), serde_json::Value::Array(required_all));
+                    new_map.insert("additionalProperties".to_string(), serde_json::Value::Bool(false));
+                    new_map.insert("type".to_string(), serde_json::Value::String("object".to_string()));
+                }
+            }
+
+            serde_json::Value::Object(new_map)
+        }
+        serde_json::Value::Array(arr) => {
+            serde_json::Value::Array(arr.iter().map(normalize_schema_for_openai).collect())
+        }
+        _ => schema.clone(),
+    }
 }
 
 // ==================== Claude 协议结构 ====================
@@ -223,14 +392,27 @@ pub async fn openai_chat_completion(params: LLMRequestParams) -> LLMResult {
         content: user_content,
     });
 
-    // 构建响应格式
+    // 构建响应格式（根据模型决定使用 json_schema 或 json_object）
     let response_format = params.response_json_schema.as_ref().map(|schema| {
-        OpenAIResponseFormat {
-            format_type: "json_schema".to_string(),
-            json_schema: Some(OpenAIJsonSchema {
-                name: "response".to_string(),
-                schema: schema.clone(),
-            }),
+        match select_openai_structured_output_mode(&params.model) {
+            OpenAIStructuredOutputMode::JsonSchema => {
+                println!("[Rust] OpenAI response_format: json_schema (strict)");
+                OpenAIResponseFormat {
+                    format_type: "json_schema".to_string(),
+                    json_schema: Some(OpenAIJsonSchema {
+                        name: "response".to_string(),
+                        schema: normalize_schema_for_openai(schema),
+                        strict: true,
+                    }),
+                }
+            }
+            OpenAIStructuredOutputMode::JsonObject => {
+                println!("[Rust] OpenAI response_format: json_object");
+                OpenAIResponseFormat {
+                    format_type: "json_object".to_string(),
+                    json_schema: None,
+                }
+            }
         }
     });
 
