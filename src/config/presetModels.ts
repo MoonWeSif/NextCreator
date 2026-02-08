@@ -19,6 +19,11 @@ export const LLM_PRESET_MODELS: Record<ProviderProtocol, PresetModel[]> = {
     { value: "gpt-5.1", label: "GPT-5.1" },
     { value: "gpt-5.2", label: "GPT-5.2" },
   ],
+  openaiResponses: [
+    { value: "gpt-5", label: "GPT-5" },
+    { value: "gpt-5.1", label: "GPT-5.1" },
+    { value: "gpt-5.2", label: "GPT-5.2" },
+  ],
   claude: [
     { value: "claude-sonnet-4-5-20250929", label: "Claude Sonnet 4.5" },
     { value: "claude-opus-4-5-20251101", label: "Claude Opus 4.5" },
@@ -30,6 +35,7 @@ export const LLM_PRESET_MODELS: Record<ProviderProtocol, PresetModel[]> = {
 export const DEFAULT_LLM_MODELS: Record<ProviderProtocol, string> = {
   google: "gemini-3-pro-preview",
   openai: "gpt-5",
+  openaiResponses: "gpt-5",
   claude: "claude-sonnet-4-5-20250929",
 };
 

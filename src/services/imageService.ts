@@ -21,6 +21,7 @@ function getApiBaseUrl(baseUrl: string, protocol: ProviderProtocol): string {
     case "google":
       return `${cleanBaseUrl}/v1beta`;
     case "openai":
+    case "openaiResponses":
       return `${cleanBaseUrl}/v1`;
     case "claude":
       return `${cleanBaseUrl}/v1`;

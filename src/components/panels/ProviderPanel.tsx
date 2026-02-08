@@ -10,6 +10,7 @@ import type { Provider, NodeProviderMapping, ProviderProtocol } from "@/types";
 // 协议类型配置
 const protocolConfig: { key: ProviderProtocol; label: string }[] = [
   { key: "openai", label: "OpenAI" },
+  { key: "openaiResponses", label: "OpenAI Responses" },
   { key: "google", label: "Google" },
   { key: "claude", label: "Claude" },
 ];
@@ -17,6 +18,7 @@ const protocolConfig: { key: ProviderProtocol; label: string }[] = [
 // 协议类型显示标签
 const protocolLabels: Record<ProviderProtocol, string> = {
   openai: "OpenAI",
+  openaiResponses: "OpenAI Responses",
   google: "Google",
   claude: "Claude",
 };

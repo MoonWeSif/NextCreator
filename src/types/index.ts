@@ -202,7 +202,7 @@ export interface NodeDefinition {
 }
 
 // 供应商协议类型
-export type ProviderProtocol = 'openai' | 'google' | 'claude';
+export type ProviderProtocol = 'openai' | 'openaiResponses' | 'google' | 'claude';
 
 // 供应商配置
 export interface Provider {

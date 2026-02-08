@@ -76,6 +76,8 @@ function getCommandByProtocol(protocol: string): string {
       return "gemini_generate_text";
     case "openai":
       return "openai_chat_completion";
+    case "openaiResponses":
+      return "openai_responses";
     case "claude":
       return "claude_chat_completion";
     default:
@@ -90,6 +92,7 @@ function getBaseUrlByProtocol(baseUrl: string, protocol: string): string {
     case "google":
       return cleanUrl + "/v1beta";
     case "openai":
+    case "openaiResponses":
     case "claude":
       return cleanUrl;  // OpenAI 和 Claude 的 Rust 后端会自动添加 /v1
     default:
@@ -140,6 +143,8 @@ async function invokeLLMByProtocol(params: TauriLLMParams, provider: Provider): 
   let fullRequestUrl = params.baseUrl;
   if (protocol === "openai") {
     fullRequestUrl = `${params.baseUrl}/v1/chat/completions`;
+  } else if (protocol === "openaiResponses") {
+    fullRequestUrl = `${params.baseUrl}/v1/responses`;
   } else if (protocol === "claude") {
     fullRequestUrl = `${params.baseUrl}/v1/messages`;
   } else if (protocol === "google") {
