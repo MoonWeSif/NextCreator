@@ -3,7 +3,7 @@
   <h1>NextCreator</h1>
   <p>基于可视化节点的 AI 内容生成工作流工具</p>
 
-  ![Version](https://img.shields.io/badge/version-0.2.3-blue.svg)
+  ![Version](https://img.shields.io/badge/version-0.2.4-blue.svg)
   ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg)
   ![Tauri](https://img.shields.io/badge/Tauri-2.0-24C8DB.svg?logo=tauri&logoColor=white)
   ![License](https://img.shields.io/badge/license-AGPL%20v3-blue.svg)

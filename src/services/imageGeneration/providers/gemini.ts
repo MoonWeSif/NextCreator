@@ -178,7 +178,9 @@ export class GeminiImageProvider implements ImageGenerationProvider {
       };
     }
 
-    const fallbackImage = !result.imageData ? extractBase64ImageFromText(result.text) : undefined;
+    const fallbackImage = !result.imageData
+      ? extractBase64ImageFromText(result.text) || undefined
+      : undefined;
 
     // 检查是否有图片数据
     if (!result.imageData && !fallbackImage) {
