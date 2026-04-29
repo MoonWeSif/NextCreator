@@ -240,6 +240,7 @@ export function validateConnection(
     targetNode.type === "imageGeneratorProNode" ||
     targetNode.type === "imageGeneratorFastNode" ||
     targetNode.type === "imageGeneratorNB2Node" ||
+    targetNode.type === "gptImageGeneratorNode" ||
     targetNode.type === "pptContentNode" ||
     targetNode.type === "veoGeneratorNode";
 

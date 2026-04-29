@@ -3,7 +3,7 @@ import { Handle, Position, type NodeProps, type Node } from "@xyflow/react";
 import { Wand2, Play, AlertCircle, Maximize2, AlertTriangle, CircleAlert } from "lucide-react";
 import { useFlowStore } from "@/stores/flowStore";
 import { useCanvasStore } from "@/stores/canvasStore";
-import { generateImage } from "@/services/imageGeneration";
+import { editImage, generateImage } from "@/services/imageGeneration";
 import { saveImage, getImageUrl, type InputImageInfo } from "@/services/fileStorageService";
 import { ImagePreviewModal } from "@/components/ui/ImagePreviewModal";
 import { ErrorDetailModal } from "@/components/ui/ErrorDetailModal";
@@ -12,14 +12,23 @@ import { useLoadingDots } from "@/hooks/useLoadingDots";
 import { useNodeConnectionStatus } from "@/hooks/useNodeConnectionStatus";
 import type { ImageInputNodeData, ModelType, ErrorDetails } from "@/types";
 
+type GptImageSize = "auto" | `${number}x${number}`;
+type GptImageSizeMode = "preset" | "custom";
+
 // GPT Image 节点数据类型
 interface GptImageGeneratorNodeData {
     [key: string]: unknown;
     label: string;
     model: ModelType;
-    aspectRatio: "1:1" | "16:9" | "9:16";
-    quality: "low" | "medium" | "high";
+    aspectRatio?: string;
+    size?: GptImageSize;
+    sizeMode?: GptImageSizeMode;
+    customWidth?: number;
+    customHeight?: number;
+    quality: "auto" | "low" | "medium" | "high";
     background: "auto" | "transparent" | "opaque";
+    outputFormat?: "png" | "jpeg" | "webp";
+    moderation?: "auto" | "low";
     status: "idle" | "loading" | "success" | "error";
     outputImage?: string;
     outputImagePath?: string;
@@ -31,24 +40,98 @@ type GptImageGeneratorNode = Node<GptImageGeneratorNodeData>;
 
 // 预设模型选项
 const presetModels = [
+    { value: "gpt-image-2", label: "GPT Image 2" },
     { value: "gpt-image-1.5", label: "GPT Image 1.5" },
     { value: "gpt-image-1", label: "GPT Image 1" },
     { value: "gpt-image-1-mini", label: "GPT Image Mini" },
 ];
 
-// 宽高比选项
-const aspectRatioOptions = [
-    { value: "1:1", label: "1:1" },
-    { value: "16:9", label: "16:9" },
-    { value: "9:16", label: "9:16" },
-];
-
 // 质量选项 (GPT Image 使用 low/medium/high)
 const qualityOptions = [
+    { value: "auto", label: "自动" },
     { value: "low", label: "低" },
     { value: "medium", label: "中" },
     { value: "high", label: "高" },
 ];
+
+const sizePresetOptions: Array<{ value: GptImageSize | "custom"; label: string }> = [
+    { value: "auto", label: "自动" },
+    { value: "1024x1024", label: "1:1 1024" },
+    { value: "2048x2048", label: "1:1 2048" },
+    { value: "2880x2880", label: "1:1 最大" },
+    { value: "1536x864", label: "16:9 1536" },
+    { value: "2048x1152", label: "16:9 2048" },
+    { value: "3840x2160", label: "16:9 4K" },
+    { value: "864x1536", label: "9:16 1536" },
+    { value: "1152x2048", label: "9:16 2048" },
+    { value: "2160x3840", label: "9:16 4K" },
+    { value: "1536x1152", label: "4:3 1536" },
+    { value: "1152x1536", label: "3:4 1536" },
+    { value: "1536x1024", label: "3:2 1536" },
+    { value: "1024x1536", label: "2:3 1536" },
+    { value: "1600x1280", label: "5:4 1600" },
+    { value: "1280x1600", label: "4:5 1600" },
+    { value: "1792x768", label: "21:9 1792" },
+    { value: "2304x768", label: "3:1 2304" },
+    { value: "custom", label: "自定义" },
+];
+
+const sizePresetValues = new Set(
+    sizePresetOptions
+        .map((opt) => opt.value)
+        .filter((value): value is GptImageSize => value !== "custom")
+);
+
+function parseSize(size?: string): { width: number; height: number } | null {
+    const match = size?.match(/^(\d+)x(\d+)$/);
+    if (!match) return null;
+
+    return {
+        width: Number(match[1]),
+        height: Number(match[2]),
+    };
+}
+
+function getCustomDimensions(data: GptImageGeneratorNodeData) {
+    const parsedSize = parseSize(data.size);
+    return {
+        width: data.customWidth || parsedSize?.width || 1024,
+        height: data.customHeight || parsedSize?.height || 1024,
+    };
+}
+
+function getSizeMode(data: GptImageGeneratorNodeData): GptImageSizeMode {
+    if (data.sizeMode) return data.sizeMode;
+    return data.size && !sizePresetValues.has(data.size) ? "custom" : "preset";
+}
+
+function getResolvedSize(data: GptImageGeneratorNodeData): GptImageSize {
+    if (getSizeMode(data) !== "custom") {
+        return data.size || "auto";
+    }
+
+    const { width, height } = getCustomDimensions(data);
+    return `${width}x${height}`;
+}
+
+function validateGptImage2Size(size: GptImageSize): string | undefined {
+    if (size === "auto") return undefined;
+
+    const parsed = parseSize(size);
+    if (!parsed) return "尺寸格式无效";
+
+    const { width, height } = parsed;
+    if (width <= 0 || height <= 0) return "宽高必须大于 0";
+    if (width % 16 !== 0 || height % 16 !== 0) return "宽高必须是 16 的倍数";
+    if (Math.max(width, height) > 3840) return "最长边不能超过 3840";
+    if (Math.max(width, height) / Math.min(width, height) > 3) return "宽高比不能超过 3:1";
+
+    const pixels = width * height;
+    if (pixels < 655360) return "总像素不能低于 655,360";
+    if (pixels > 8294400) return "总像素不能超过 8,294,400";
+
+    return undefined;
+}
 
 // 背景选项 (GPT Image 特有)
 const backgroundOptions = [
@@ -57,13 +140,24 @@ const backgroundOptions = [
     { value: "opaque", label: "不透明" },
 ];
 
+const outputFormatOptions = [
+    { value: "png", label: "PNG" },
+    { value: "jpeg", label: "JPEG" },
+    { value: "webp", label: "WebP" },
+];
+
+const moderationOptions = [
+    { value: "auto", label: "标准" },
+    { value: "low", label: "宽松" },
+];
+
 // GPT Image 节点组件
 function GptImageGeneratorBase({
     id,
     data,
     selected,
 }: NodeProps<GptImageGeneratorNode>) {
-    const { updateNodeData, getConnectedInputDataAsync, getConnectedImagesWithInfo } = useFlowStore();
+    const { updateNodeData, getConnectedInputDataAsync, getConnectedImagesWithInfo, getConnectedImagesWithInfoAsync } = useFlowStore();
     const [showPreview, setShowPreview] = useState(false);
     const [showErrorDetail, setShowErrorDetail] = useState(false);
 
@@ -77,12 +171,25 @@ function GptImageGeneratorBase({
     const canvasIdRef = useRef<string | null>(null);
 
     // 默认模型
-    const defaultModel: ModelType = "gpt-image-1";
+    const defaultModel: ModelType = "gpt-image-2";
     const model: ModelType = data.model || defaultModel;
+    const sizeMode = getSizeMode(data);
+    const resolvedSize = getResolvedSize(data);
+    const customDimensions = getCustomDimensions(data);
+    const sizeValidationError = validateGptImage2Size(resolvedSize);
+    const sizeSelectValue = sizeMode === "custom" ? "custom" : (data.size || "auto");
+    const backgroundOptionsForModel = model === "gpt-image-2"
+        ? backgroundOptions.filter((opt) => opt.value !== "transparent")
+        : backgroundOptions;
 
     // 处理模型变更
     const handleModelChange = (value: string) => {
-        updateNodeData<GptImageGeneratorNodeData>(id, { model: value });
+        updateNodeData<GptImageGeneratorNodeData>(id, {
+            model: value,
+            background: value === "gpt-image-2" && data.background === "transparent"
+                ? "auto"
+                : data.background,
+        });
     };
 
     // 更新节点数据，同时更新 canvasStore
@@ -116,7 +223,13 @@ function GptImageGeneratorBase({
     }, [updateNodeData]);
 
     const handleGenerate = useCallback(async () => {
-        const { prompt, images } = await getConnectedInputDataAsync(id);
+        const { prompt } = await getConnectedInputDataAsync(id);
+        const connectedImageDetails = await getConnectedImagesWithInfoAsync(id);
+        const orderedImageDetails = [...connectedImageDetails].sort((a, b) => {
+            return Number(!!b.hasMask && !!b.maskImageData) - Number(!!a.hasMask && !!a.maskImageData);
+        });
+        const inputImages = orderedImageDetails.map((img) => img.imageData).filter(Boolean);
+        const maskImage = orderedImageDetails.find((img) => img.hasMask && img.maskImageData)?.maskImageData;
         const { activeCanvasId } = useCanvasStore.getState();
         canvasIdRef.current = activeCanvasId;
 
@@ -125,16 +238,30 @@ function GptImageGeneratorBase({
             return;
         }
 
+        if (sizeValidationError) {
+            updateNodeDataWithCanvas(id, { status: "error", error: sizeValidationError, errorDetails: undefined });
+            return;
+        }
+
         updateNodeDataWithCanvas(id, { status: "loading", error: undefined });
 
         try {
-            const response = await generateImage({
+            const request = {
                 prompt,
                 model,
-                inputImages: images.length > 0 ? images : undefined,
+                inputImages: inputImages.length > 0 ? inputImages : undefined,
+                maskImage,
                 aspectRatio: data.aspectRatio,
-                imageSize: data.quality === "high" ? "4K" : data.quality === "medium" ? "2K" : "1K",
-            }, "gptImageGenerator");
+                size: resolvedSize,
+                quality: data.quality || "auto",
+                background: data.background || "auto",
+                outputFormat: data.outputFormat || "png",
+                moderation: data.moderation || "auto",
+            };
+
+            const response = inputImages.length > 0
+                ? await editImage(request, "gptImageGenerator")
+                : await generateImage(request, "gptImageGenerator");
 
             if (response.imageData) {
                 if (activeCanvasId) {
@@ -190,7 +317,26 @@ function GptImageGeneratorBase({
         } catch {
             updateNodeDataWithCanvas(id, { status: "error", error: "生成失败", errorDetails: undefined });
         }
-    }, [id, model, data.aspectRatio, data.quality, updateNodeDataWithCanvas, getConnectedInputDataAsync, getConnectedImagesWithInfo, updateNodeData]);
+    }, [
+        id,
+        model,
+        resolvedSize,
+        sizeValidationError,
+        data.aspectRatio,
+        data.size,
+        data.sizeMode,
+        data.customWidth,
+        data.customHeight,
+        data.quality,
+        data.background,
+        data.outputFormat,
+        data.moderation,
+        updateNodeDataWithCanvas,
+        getConnectedInputDataAsync,
+        getConnectedImagesWithInfo,
+        getConnectedImagesWithInfoAsync,
+        updateNodeData,
+    ]);
 
     return (
         <>
@@ -262,36 +408,84 @@ function GptImageGeneratorBase({
                         modelCategory="imageGenerator"
                     />
 
-                    {/* 宽高比选项 */}
+                    {/* 尺寸选项 */}
                     <div>
-                        <label className="text-xs text-base-content/60 mb-0.5 block">宽高比</label>
-                        <div className="grid grid-cols-3 gap-1">
-                            {aspectRatioOptions.map((opt) => (
-                                <button
-                                    key={opt.value}
-                                    type="button"
-                                    className={`btn btn-xs ${(data.aspectRatio || "1:1") === opt.value ? "btn-secondary" : "btn-ghost bg-base-200"}`}
-                                    onPointerDown={(e) => e.stopPropagation()}
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        updateNodeData<GptImageGeneratorNodeData>(id, { aspectRatio: opt.value as GptImageGeneratorNodeData["aspectRatio"] });
-                                    }}
-                                >
+                        <label className="text-xs text-base-content/60 mb-0.5 block">尺寸/比例</label>
+                        <select
+                            className="select select-bordered select-xs w-full"
+                            value={sizeSelectValue}
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onChange={(e) => {
+                                const value = e.target.value as GptImageSize | "custom";
+                                if (value === "custom") {
+                                    updateNodeData<GptImageGeneratorNodeData>(id, {
+                                        sizeMode: "custom",
+                                        customWidth: customDimensions.width,
+                                        customHeight: customDimensions.height,
+                                    });
+                                    return;
+                                }
+
+                                updateNodeData<GptImageGeneratorNodeData>(id, {
+                                    sizeMode: "preset",
+                                    size: value,
+                                });
+                            }}
+                        >
+                            {sizePresetOptions.map((opt) => (
+                                <option key={opt.value} value={opt.value}>
                                     {opt.label}
-                                </button>
+                                </option>
                             ))}
-                        </div>
+                        </select>
+                        {sizeMode === "custom" && (
+                            <div className="grid grid-cols-2 gap-1 mt-1">
+                                <input
+                                    type="number"
+                                    min={16}
+                                    max={3840}
+                                    step={16}
+                                    className="input input-bordered input-xs w-full"
+                                    value={customDimensions.width}
+                                    onPointerDown={(e) => e.stopPropagation()}
+                                    onChange={(e) => {
+                                        updateNodeData<GptImageGeneratorNodeData>(id, {
+                                            customWidth: Number(e.target.value),
+                                            sizeMode: "custom",
+                                        });
+                                    }}
+                                />
+                                <input
+                                    type="number"
+                                    min={16}
+                                    max={3840}
+                                    step={16}
+                                    className="input input-bordered input-xs w-full"
+                                    value={customDimensions.height}
+                                    onPointerDown={(e) => e.stopPropagation()}
+                                    onChange={(e) => {
+                                        updateNodeData<GptImageGeneratorNodeData>(id, {
+                                            customHeight: Number(e.target.value),
+                                            sizeMode: "custom",
+                                        });
+                                    }}
+                                />
+                            </div>
+                        )}
+                        {sizeMode === "custom" && sizeValidationError && (
+                            <div className="text-[10px] text-error mt-1">{sizeValidationError}</div>
+                        )}
                     </div>
 
                     {/* 质量选项 */}
                     <div>
                         <label className="text-xs text-base-content/60 mb-0.5 block">质量</label>
-                        <div className="grid grid-cols-3 gap-1">
+                        <div className="grid grid-cols-4 gap-1">
                             {qualityOptions.map((opt) => (
                                 <button
                                     key={opt.value}
                                     type="button"
-                                    className={`btn btn-xs ${(data.quality || "medium") === opt.value ? "btn-secondary" : "btn-ghost bg-base-200"}`}
+                                    className={`btn btn-xs px-0 ${(data.quality || "auto") === opt.value ? "btn-secondary" : "btn-ghost bg-base-200"}`}
                                     onPointerDown={(e) => e.stopPropagation()}
                                     onClick={(e) => {
                                         e.stopPropagation();
@@ -308,7 +502,7 @@ function GptImageGeneratorBase({
                     <div>
                         <label className="text-xs text-base-content/60 mb-0.5 block">背景</label>
                         <div className="grid grid-cols-3 gap-1">
-                            {backgroundOptions.map((opt) => (
+                            {backgroundOptionsForModel.map((opt) => (
                                 <button
                                     key={opt.value}
                                     type="button"
@@ -322,6 +516,48 @@ function GptImageGeneratorBase({
                                     {opt.label}
                                 </button>
                             ))}
+                        </div>
+                    </div>
+
+                    {/* 输出格式与审核 */}
+                    <div className="grid grid-cols-2 gap-1.5">
+                        <div>
+                            <label className="text-xs text-base-content/60 mb-0.5 block">格式</label>
+                            <select
+                                className="select select-bordered select-xs w-full"
+                                value={data.outputFormat || "png"}
+                                onPointerDown={(e) => e.stopPropagation()}
+                                onChange={(e) => {
+                                    updateNodeData<GptImageGeneratorNodeData>(id, {
+                                        outputFormat: e.target.value as GptImageGeneratorNodeData["outputFormat"],
+                                    });
+                                }}
+                            >
+                                {outputFormatOptions.map((opt) => (
+                                    <option key={opt.value} value={opt.value}>
+                                        {opt.label}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="text-xs text-base-content/60 mb-0.5 block">审核</label>
+                            <select
+                                className="select select-bordered select-xs w-full"
+                                value={data.moderation || "auto"}
+                                onPointerDown={(e) => e.stopPropagation()}
+                                onChange={(e) => {
+                                    updateNodeData<GptImageGeneratorNodeData>(id, {
+                                        moderation: e.target.value as GptImageGeneratorNodeData["moderation"],
+                                    });
+                                }}
+                            >
+                                {moderationOptions.map((opt) => (
+                                    <option key={opt.value} value={opt.value}>
+                                        {opt.label}
+                                    </option>
+                                ))}
+                            </select>
                         </div>
                     </div>
 

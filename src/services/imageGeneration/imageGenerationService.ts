@@ -3,7 +3,12 @@
  */
 
 import { imageGenerationRegistry } from "./registry";
-import { geminiImageProvider, dalleImageProvider, fluxImageProvider } from "./providers";
+import {
+  geminiImageProvider,
+  dalleImageProvider,
+  fluxImageProvider,
+  gptImageProvider,
+} from "./providers";
 import { useSettingsStore } from "@/stores/settingsStore";
 import type {
   ImageGenerationRequest,
@@ -24,6 +29,9 @@ export function initializeImageGenerationProviders(): void {
 
   // 注册 Flux 提供商（OpenAI Images API 格式）
   imageGenerationRegistry.register(fluxImageProvider);
+
+  // 注册 GPT Image 提供商（OpenAI Images API generation/edit 格式）
+  imageGenerationRegistry.register(gptImageProvider);
 
   console.log(
     "[ImageGenService] Providers initialized:",
@@ -60,6 +68,29 @@ function getProviderConfig(nodeType: ImageNodeType): ProviderConfig {
 }
 
 /**
+ * 根据节点类型选择具体实现。同一个 openai 协议下存在 DALL-E、Flux、GPT Image
+ * 等多种 Images API 兼容形态，不能只按协议取第一个 provider。
+ */
+function getProviderForNodeType(nodeType: ImageNodeType, config: ProviderConfig) {
+  if (config.protocol === "openai") {
+    const providerIdByNodeType: Partial<Record<ImageNodeType, string>> = {
+      dalleGenerator: "dalle",
+      fluxGenerator: "flux",
+      gptImageGenerator: "gptImage",
+      doubaoGenerator: "dalle",
+      zImageGenerator: "dalle",
+    };
+
+    const providerId = providerIdByNodeType[nodeType];
+    if (providerId) {
+      return imageGenerationRegistry.get(providerId);
+    }
+  }
+
+  return imageGenerationRegistry.getByProtocol(config.protocol);
+}
+
+/**
  * 生成图片（统一入口）
  */
 export async function generateImage(
@@ -70,8 +101,8 @@ export async function generateImage(
   try {
     const config = getProviderConfig(nodeType);
 
-    // 根据协议获取对应的提供商实现
-    const provider = imageGenerationRegistry.getByProtocol(config.protocol);
+    // 根据节点类型和协议获取对应的提供商实现
+    const provider = getProviderForNodeType(nodeType, config);
 
     if (!provider) {
       return {
@@ -108,7 +139,7 @@ export async function editImage(
 export function getProviderCapabilities(nodeType: ImageNodeType) {
   try {
     const config = getProviderConfig(nodeType);
-    const provider = imageGenerationRegistry.getByProtocol(config.protocol);
+    const provider = getProviderForNodeType(nodeType, config);
     return provider
       ? {
           capabilities: provider.capabilities,

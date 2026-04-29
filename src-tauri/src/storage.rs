@@ -100,6 +100,20 @@ fn get_cache_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     Ok(cache_dir)
 }
 
+fn guess_image_extension(image_data: &[u8]) -> &'static str {
+    if image_data.starts_with(b"\x89PNG\r\n\x1a\n") {
+        "png"
+    } else if image_data.starts_with(b"\xff\xd8\xff") {
+        "jpg"
+    } else if image_data.len() >= 12 && &image_data[0..4] == b"RIFF" && &image_data[8..12] == b"WEBP" {
+        "webp"
+    } else if image_data.starts_with(b"GIF87a") || image_data.starts_with(b"GIF89a") {
+        "gif"
+    } else {
+        "png"
+    }
+}
+
 // 保存图片（从 base64）- 同时保存元数据
 #[tauri::command]
 pub fn save_image(
@@ -132,7 +146,8 @@ pub fn save_image(
     // 生成唯一文件名
     let id = Uuid::new_v4().to_string();
     let timestamp = chrono::Utc::now().timestamp();
-    let filename = format!("{}_{}.png", id, timestamp);
+    let ext = guess_image_extension(&image_data);
+    let filename = format!("{}_{}.{}", id, timestamp, ext);
     let file_path = target_dir.join(&filename);
 
     // 写入图片文件

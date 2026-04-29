@@ -22,8 +22,16 @@ export interface ImageGenerationRequest {
   prompt: string;
   model: string;
   inputImages?: string[]; // base64 图片数组
+  maskImage?: string; // base64 蒙版图片，仅用于支持蒙版的编辑接口
   aspectRatio?: string; // 宽高比
   imageSize?: string; // 分辨率
+  size?: string; // OpenAI Images API 的显式尺寸，如 1024x1024 或 auto
+  quality?: string; // 渲染质量，如 low/medium/high/auto
+  background?: string; // 背景模式，如 auto/opaque/transparent
+  outputFormat?: string; // 输出格式，如 png/jpeg/webp
+  outputCompression?: number; // jpeg/webp 压缩比例 0-100
+  moderation?: string; // 内容审核强度，如 auto/low
+  inputFidelity?: string; // 输入图保真度，GPT Image 2 会自动高保真且不允许传入
   negativePrompt?: string; // 负面提示词（部分供应商支持）
   seed?: number; // 随机种子
   steps?: number; // 生成步数
