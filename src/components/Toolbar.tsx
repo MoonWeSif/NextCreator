@@ -129,18 +129,18 @@ export function Toolbar({ onOpenHelp }: { onOpenHelp?: () => void }) {
   const cmdKey = isMac ? "⌘" : "Ctrl";
 
   return (
-    <div className="flex items-center justify-between px-4 py-2 bg-base-100 border-b border-base-300">
+    <div className="nc-toolbar flex items-center justify-between px-4">
       {/* 左侧 Logo */}
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2">
-          <img src={logoImage} alt="NextCreator" className="w-8 h-8" />
-          <span className="font-semibold text-lg">NextCreator</span>
+          <img src={logoImage} alt="NextCreator" className="w-8 h-8 rounded-md" />
+          <span className="text-[17px] font-bold leading-none tracking-[-0.25px]">NextCreator</span>
         </div>
-        <div className="badge badge-ghost badge-sm">v0.2.6</div>
+        <div className="nc-badge">v0.2.6</div>
       </div>
 
       {/* 中间工具 */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5 rounded-lg border border-base-300 bg-base-100/80 px-1.5 py-1 shadow-[var(--nc-shadow-card)]">
         {/* 撤销/重做 */}
         <div className="tooltip tooltip-bottom" data-tip={`撤销 (${cmdKey}+Z)`}>
           <button
@@ -160,11 +160,11 @@ export function Toolbar({ onOpenHelp }: { onOpenHelp?: () => void }) {
             <Redo2 className="w-4 h-4" />
           </button>
         </div>
-        <div className="divider divider-horizontal mx-1" />
+        <div className="mx-1 h-5 w-px bg-base-300" />
 
         {/* 工作流控制 */}
         <WorkflowControls />
-        <div className="divider divider-horizontal mx-1" />
+        <div className="mx-1 h-5 w-px bg-base-300" />
 
         <div className="tooltip tooltip-bottom" data-tip="导入工作流">
           <button className="btn btn-ghost btn-sm gap-2" onClick={handleImport}>
@@ -178,7 +178,7 @@ export function Toolbar({ onOpenHelp }: { onOpenHelp?: () => void }) {
             导出
           </button>
         </div>
-        <div className="divider divider-horizontal mx-1" />
+        <div className="mx-1 h-5 w-px bg-base-300" />
         <div className="tooltip tooltip-bottom" data-tip="清空画布">
           <button
             className="btn btn-ghost btn-sm text-error gap-2"
@@ -191,7 +191,7 @@ export function Toolbar({ onOpenHelp }: { onOpenHelp?: () => void }) {
       </div>
 
       {/* 右侧设置 */}
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1 rounded-lg border border-transparent bg-base-100/40 p-1">
         <div className="tooltip tooltip-bottom" data-tip="存储管理">
           <button className="btn btn-ghost btn-sm btn-circle" onClick={openStorageModal}>
             <HardDrive className="w-5 h-5" />
@@ -255,7 +255,7 @@ function ClearConfirmModal({ onConfirm, onClose }: ClearConfirmModalProps) {
       {/* Modal 内容 */}
       <div
         className={`
-          relative bg-base-100 rounded-xl p-5 mx-4 max-w-sm shadow-xl
+          nc-panel relative rounded-xl p-5 mx-4 max-w-sm
           transition-all duration-200 ease-out
           ${contentClasses}
         `}

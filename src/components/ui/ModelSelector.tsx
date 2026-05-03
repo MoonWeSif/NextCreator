@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
+import { useState, useCallback, useEffect, useRef, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { createPortal } from "react-dom";
 import { ChevronDown, X, Check, Trash2, Search, Plus } from "lucide-react";
 import { useCustomModelStore, type ModelCategory } from "@/stores/customModelStore";
@@ -36,7 +36,7 @@ export function ModelSelector({
   options,
   onChange,
   allowCustom = true,
-  customPlaceholder = "输入模型名称...",
+  customPlaceholder = "搜索或输入模型名称",
   variant = "primary",
   title = "选择模型",
   className = "",
@@ -96,34 +96,37 @@ export function ModelSelector({
   return (
     <div
       ref={containerRef}
-      className={`relative ${className}`}
+      className={`nc-model-selector nc-model-selector-${variant} relative ${className}`}
       onPointerDown={(e) => e.stopPropagation()}
       onMouseDown={(e) => e.stopPropagation()}
     >
-      <label className="text-xs text-base-content/60 mb-0.5 block">模型</label>
+      <label className="mb-1 block text-xs text-base-content/60">模型</label>
       <button
         type="button"
         className={`
-          w-full flex items-center justify-between gap-2 rounded-lg
-          bg-base-200/70 hover:bg-base-200 border border-base-300/70
-          transition-colors
-          ${mode === "inline" ? "min-h-9 px-3 py-2 text-sm" : "px-2 py-1.5 text-xs"}
-          ${isOpen ? `bg-base-100 ring-2 ${getOpenStateClass(variant)}` : ""}
+          nc-model-selector-trigger w-full rounded-lg border text-left
+          ${mode === "inline"
+            ? "flex min-h-[56px] items-center justify-between gap-3 bg-base-100 px-3 py-2.5 hover:bg-base-200/35"
+            : "flex items-center justify-between gap-2 bg-base-200/70 px-2 py-1.5 text-xs hover:bg-base-200"
+          }
+          ${isOpen ? `nc-model-selector-trigger-open bg-base-100 ${getOpenStateClass(variant)}` : "border-base-300/70"}
         `}
         onClick={() => setIsOpen((open) => !open)}
         onPointerDown={(e) => e.stopPropagation()}
       >
         <span className="min-w-0 flex-1 text-left">
-          <span className={`block truncate ${isCustomModel ? `${accentTextClass} font-medium` : "text-base-content"}`}>
+          <span className={`block ${mode === "inline" ? "line-clamp-2 leading-5" : "truncate"} ${isCustomModel ? `${accentTextClass} font-medium` : "text-base-content"}`}>
             {mode === "inline" ? inlineDisplayLabel : compactDisplayName}
           </span>
           {mode === "inline" && inlineDisplayMeta && (
-            <span className="mt-0.5 block truncate text-[11px] leading-none text-base-content/45">
+            <span className="mt-1 block break-all text-[11px] leading-4 text-base-content/45">
               {inlineDisplayMeta}
             </span>
           )}
         </span>
-        <ChevronDown className={`w-3.5 h-3.5 flex-shrink-0 text-base-content/45 ${isOpen ? "rotate-180" : ""}`} />
+        <span className={`nc-model-selector-chevron-shell flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md border border-base-300/70 bg-base-200/40 ${isOpen ? `${accentTextClass} shadow-[0_1px_8px_rgba(15,23,42,0.08)]` : "text-base-content/45"}`}>
+          <ChevronDown className={`nc-model-selector-chevron h-3.5 w-3.5 ${isOpen ? "rotate-180" : ""}`} />
+        </span>
       </button>
 
       {isOpen && mode === "modal" && (
@@ -170,22 +173,22 @@ interface ModelSelectorDropdownProps {
 function getSelectedBgClass(variant: "primary" | "warning" | "info") {
   switch (variant) {
     case "warning":
-      return "bg-warning/15 text-warning border-warning/25 shadow-[inset_3px_0_0_hsl(var(--wa))]";
+      return "bg-warning/10 text-warning border-warning/25";
     case "info":
-      return "bg-info/15 text-info border-info/25 shadow-[inset_3px_0_0_hsl(var(--in))]";
+      return "bg-info/10 text-info border-info/25";
     default:
-      return "bg-primary/15 text-primary border-primary/25 shadow-[inset_3px_0_0_hsl(var(--p))]";
+      return "bg-primary/10 text-primary border-primary/25";
   }
 }
 
 function getOpenStateClass(variant: "primary" | "warning" | "info") {
   switch (variant) {
     case "warning":
-      return "border-warning/50 ring-warning/15";
+      return "border-warning/45 shadow-[0_0_0_3px_hsl(var(--wa)/0.12)]";
     case "info":
-      return "border-info/50 ring-info/15";
+      return "border-info/45 shadow-[0_0_0_3px_hsl(var(--in)/0.12)]";
     default:
-      return "border-primary/50 ring-primary/15";
+      return "border-primary/45 shadow-[0_0_0_3px_hsl(var(--p)/0.12)]";
   }
 }
 
@@ -203,11 +206,11 @@ function getAccentTextClass(variant: "primary" | "warning" | "info") {
 function getAccentSoftClass(variant: "primary" | "warning" | "info") {
   switch (variant) {
     case "warning":
-      return "bg-warning/10 text-warning border-warning/20 hover:bg-warning/15";
+      return "nc-model-selector-add-option bg-warning/10 text-warning border-warning/20 hover:bg-warning/20";
     case "info":
-      return "bg-info/10 text-info border-info/20 hover:bg-info/15";
+      return "nc-model-selector-add-option bg-info/10 text-info border-info/20 hover:bg-info/20";
     default:
-      return "bg-primary/10 text-primary border-primary/20 hover:bg-primary/15";
+      return "nc-model-selector-add-option bg-primary/10 text-primary border-primary/20 hover:bg-primary/20";
   }
 }
 
@@ -215,6 +218,10 @@ function modelMatchesQuery(label: string, value: string, query: string) {
   const normalizedQuery = query.trim().toLowerCase();
   if (!normalizedQuery) return true;
   return `${label} ${value}`.toLowerCase().includes(normalizedQuery);
+}
+
+function getOptionAnimationStyle(index: number): CSSProperties {
+  return { "--nc-model-option-delay": `${Math.min(Math.max(index, 0) * 28, 168)}ms` } as CSSProperties;
 }
 
 function ModelSelectorDropdown({
@@ -241,10 +248,6 @@ function ModelSelectorDropdown({
   const hasResults = filteredOptions.length > 0 || filteredCustomModels.length > 0 || canAddQuery;
   const selectedClassName = getSelectedBgClass(variant);
   const addOptionClassName = getAccentSoftClass(variant);
-
-  useEffect(() => {
-    searchInputRef.current?.focus();
-  }, []);
 
   const handleCustomModelSubmit = (modelName = query) => {
     const trimmed = modelName.trim();
@@ -277,66 +280,69 @@ function ModelSelectorDropdown({
 
   const renderPresetOption = (opt: ModelOption) => {
     const selected = value === opt.value;
+    const optionIndex = filteredOptions.findIndex((item) => item.value === opt.value);
 
     return (
       <button
         key={opt.value}
         type="button"
+        style={getOptionAnimationStyle(optionIndex)}
         className={`
-          flex w-full items-center justify-between gap-2 rounded-md border px-2.5 py-2 text-left text-sm
-          transition-colors
+          nc-model-selector-option flex w-full items-start justify-between gap-3 rounded-lg border px-3 py-2.5 text-left text-sm
           ${selected
-            ? selectedClassName
-            : "border-transparent bg-transparent text-base-content hover:bg-base-200/80"
+            ? `nc-model-selector-option-selected ${selectedClassName} shadow-[0_1px_10px_rgba(15,23,42,0.06)]`
+            : "border-transparent bg-transparent text-base-content hover:border-base-300/45 hover:bg-base-200/55 hover:shadow-[0_1px_8px_rgba(15,23,42,0.04)]"
           }
         `}
         onClick={() => onChange(opt.value)}
       >
-        <span className="min-w-0">
-          <span className="block truncate font-medium">{opt.label}</span>
+        <span className="min-w-0 flex-1">
+          <span className="block line-clamp-2 font-medium leading-5">{opt.label}</span>
           {opt.label !== opt.value && (
-            <span className="mt-0.5 block truncate text-[11px] leading-none text-base-content/45">
+            <span className="mt-1 block break-all text-[11px] leading-4 text-base-content/45">
               {opt.value}
             </span>
           )}
         </span>
-        {selected && <Check className="h-4 w-4 flex-shrink-0" />}
+        {selected && <Check className="nc-model-selector-check mt-0.5 h-4 w-4 flex-shrink-0" />}
       </button>
     );
   };
 
   const renderCustomOption = (model: string) => {
     const selected = value === model;
+    const optionIndex = filteredOptions.length + filteredCustomModels.findIndex((item) => item === model);
 
     return (
       <div
         key={model}
+        style={getOptionAnimationStyle(optionIndex)}
         className={`
-          group flex w-full items-center rounded-md border text-sm transition-colors
+          nc-model-selector-option group flex w-full items-center rounded-lg border text-sm
           ${selected
-            ? selectedClassName
-            : "border-transparent bg-transparent text-base-content hover:bg-base-200/80"
+            ? `nc-model-selector-option-selected ${selectedClassName} shadow-[0_1px_10px_rgba(15,23,42,0.06)]`
+            : "border-transparent bg-transparent text-base-content hover:border-base-300/45 hover:bg-base-200/55 hover:shadow-[0_1px_8px_rgba(15,23,42,0.04)]"
           }
         `}
       >
         <button
           type="button"
-          className="flex min-w-0 flex-1 items-center justify-between gap-2 px-2.5 py-2 text-left"
+          className="flex min-w-0 flex-1 items-center justify-between gap-2 px-3 py-2.5 text-left"
           onClick={() => onChange(model)}
         >
-          <span className="min-w-0">
-            <span className="block truncate font-medium">{model}</span>
-            <span className="mt-0.5 block truncate text-[11px] leading-none text-base-content/45">
+          <span className="min-w-0 flex-1">
+            <span className="block break-all font-medium leading-5">{model}</span>
+            <span className="mt-1 block text-[11px] leading-4 text-base-content/45">
               自定义模型
             </span>
           </span>
-          {selected && <Check className="h-4 w-4" />}
+          {selected && <Check className="nc-model-selector-check h-4 w-4" />}
         </button>
         <span className="flex flex-shrink-0 items-center pr-1.5">
           <button
             type="button"
             className="
-              rounded p-1 text-base-content/40 opacity-0 transition-colors
+              rounded p-1 text-base-content/40 opacity-0 transition-[background-color,color,opacity] duration-150 ease-out
               hover:bg-error/15 hover:text-error group-hover:opacity-100 focus:opacity-100
             "
             onClick={(event) => handleRemoveCustomModel(model, event)}
@@ -351,69 +357,77 @@ function ModelSelectorDropdown({
 
   return (
     <div
-      className="absolute left-0 right-0 top-full z-[80] mt-1 overflow-hidden rounded-xl border border-base-300 bg-base-100 shadow-xl"
+      className="nc-model-selector-dropdown absolute left-0 right-0 top-full z-[80] mt-2 overflow-hidden rounded-lg border border-base-300/80 bg-base-100 shadow-[0_18px_44px_rgba(15,23,42,0.16)]"
       onPointerDown={(e) => e.stopPropagation()}
       onMouseDown={(e) => e.stopPropagation()}
     >
-      <div className="border-b border-base-300/70 bg-base-200/25 p-2">
-        <div className="flex items-center gap-2 rounded-lg border border-base-300/70 bg-base-100 px-2.5 py-2">
-          <Search className="h-3.5 w-3.5 flex-shrink-0 text-base-content/35" />
+      <div className="border-b border-base-300/70 bg-base-200/20 p-2.5">
+        <div className="nc-model-selector-search group/search flex items-center gap-2 rounded-lg border border-base-300/70 bg-base-100 px-2.5 py-2 focus-within:border-primary/35 focus-within:shadow-[0_0_0_3px_hsl(var(--p)/0.08)]">
+          <Search className="nc-model-selector-search-icon h-3.5 w-3.5 flex-shrink-0 text-base-content/35 group-focus-within/search:text-primary/55" />
           <input
             ref={searchInputRef}
             type="text"
-            className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-base-content/35"
+            className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-base-content/35 focus:outline-none focus-visible:outline-none"
             placeholder={allowCustom ? customPlaceholder : "搜索模型"}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={handleSearchKeyDown}
           />
+          {query && (
+            <button
+              type="button"
+              className="nc-model-selector-clear rounded p-0.5 text-base-content/35 hover:bg-base-200 hover:text-base-content/60"
+              onClick={() => setQuery("")}
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
       </div>
 
-      <div className="max-h-72 overflow-y-auto p-1.5">
+      <div className="nc-scrollbar-none max-h-[360px] overflow-y-auto p-2">
         {isCustomModel && value && (
           <button
             type="button"
-            className={`mb-1 flex w-full items-center justify-between gap-2 rounded-md border px-2.5 py-2 text-left text-sm ${selectedClassName}`}
+            style={getOptionAnimationStyle(0)}
+            className={`nc-model-selector-option nc-model-selector-option-selected mb-1.5 flex w-full items-center justify-between gap-2 rounded-lg border px-3 py-2.5 text-left text-sm ${selectedClassName}`}
             onClick={() => onChange(value)}
           >
-            <span className="min-w-0">
-              <span className="block truncate font-medium">{value}</span>
-              <span className="mt-0.5 block truncate text-[11px] leading-none opacity-70">
+            <span className="min-w-0 flex-1">
+              <span className="block break-all font-medium leading-5">{value}</span>
+              <span className="mt-0.5 block text-[11px] leading-4 opacity-70">
                 当前自定义模型
               </span>
             </span>
-            <Check className="h-4 w-4 flex-shrink-0" />
+            <Check className="nc-model-selector-check h-4 w-4 flex-shrink-0" />
           </button>
         )}
 
         {filteredOptions.length > 0 && (
           <div className="space-y-1">
-            <div className="px-2 py-1 text-[11px] font-medium text-base-content/45">预设模型</div>
+            <div className="px-1.5 pb-1 pt-0.5 text-[11px] font-medium text-base-content/45">推荐模型</div>
             {filteredOptions.map(renderPresetOption)}
           </div>
         )}
 
         {allowCustom && filteredCustomModels.length > 0 && (
-          <div className="mt-1 border-t border-base-300/70 pt-1.5">
-            <div className="px-2 py-1 text-[11px] font-medium text-base-content/45">我的模型</div>
+          <div className="mt-2 border-t border-base-300/70 pt-2">
+            <div className="px-1.5 pb-1 text-[11px] font-medium text-base-content/45">我的模型</div>
             {filteredCustomModels.map(renderCustomOption)}
           </div>
         )}
 
         {canAddQuery && (
-          <div className={filteredOptions.length > 0 || filteredCustomModels.length > 0 ? "mt-1 border-t border-base-300/70 pt-1.5" : ""}>
+          <div className={filteredOptions.length > 0 || filteredCustomModels.length > 0 ? "mt-2 border-t border-base-300/70 pt-2" : ""}>
             <button
               type="button"
-              className={`flex w-full items-center gap-2 rounded-md border px-2.5 py-2 text-left text-sm transition-colors ${addOptionClassName}`}
+              style={getOptionAnimationStyle(filteredOptions.length + filteredCustomModels.length)}
+              className={`nc-model-selector-option flex w-full items-center gap-2 rounded-lg border px-3 py-2.5 text-left text-sm hover:shadow-[0_1px_8px_rgba(15,23,42,0.04)] ${addOptionClassName}`}
               onClick={() => handleCustomModelSubmit(trimmedQuery)}
             >
               <Plus className="h-4 w-4 flex-shrink-0" />
-              <span className="min-w-0">
-                <span className="block truncate font-medium">添加 “{trimmedQuery}”</span>
-                <span className="mt-0.5 block truncate text-[11px] leading-none opacity-70">
-                  保存为自定义模型
-                </span>
+              <span className="min-w-0 flex-1">
+                <span className="block break-all font-medium leading-5">添加 {trimmedQuery}</span>
               </span>
             </button>
           </div>
@@ -425,9 +439,9 @@ function ModelSelectorDropdown({
           </div>
         )}
 
-        {allowCustom && !trimmedQuery && (
-          <div className="border-t border-base-300/70 px-2 py-2 text-[11px] text-base-content/40">
-            输入模型名后按 Enter 可添加自定义模型
+        {allowCustom && !trimmedQuery && customModels.length === 0 && filteredOptions.length > 0 && (
+          <div className="mt-2 border-t border-base-300/70 px-1.5 pt-2 text-[11px] text-base-content/35">
+            可直接输入兼容模型名称
           </div>
         )}
       </div>
@@ -543,15 +557,14 @@ function ModelSelectorModal({
     }
   };
 
-  // 获取头部渐变色
-  const getHeaderGradient = () => {
+  const getHeaderAccent = () => {
     switch (variant) {
       case "warning":
-        return "bg-gradient-to-r from-amber-500 to-orange-500";
+        return "nc-node-accent-orange";
       case "info":
-        return "bg-gradient-to-r from-cyan-500 to-blue-500";
+        return "nc-node-accent-cyan";
       default:
-        return "bg-gradient-to-r from-purple-500 to-pink-500";
+        return "nc-node-accent-blue";
     }
   };
 
@@ -566,7 +579,7 @@ function ModelSelectorModal({
     >
       <div
         className={`
-          w-full max-w-xs bg-base-100 rounded-2xl shadow-2xl overflow-hidden
+          nc-panel w-full max-w-xs rounded-2xl overflow-hidden
           transition-all duration-200 ease-out
           ${isVisible && !isClosing
             ? "opacity-100 scale-100 translate-y-0"
@@ -576,10 +589,10 @@ function ModelSelectorModal({
         onClick={(e) => e.stopPropagation()}
       >
         {/* 头部 */}
-        <div className={`flex items-center justify-between px-4 py-3 ${getHeaderGradient()}`}>
-          <span className="text-sm font-medium text-white">{title}</span>
+        <div className={`nc-node-header nc-node-header-accent px-4 py-3 ${getHeaderAccent()}`}>
+          <span className="text-sm font-semibold">{title}</span>
           <button
-            className="btn btn-circle btn-ghost btn-sm text-white hover:bg-white/20"
+            className="btn btn-circle btn-ghost btn-sm"
             onClick={handleClose}
           >
             <X className="w-4 h-4" />

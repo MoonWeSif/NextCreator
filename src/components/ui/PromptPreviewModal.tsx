@@ -108,7 +108,7 @@ export function PromptPreviewModal({ prompt, isOpen, onClose }: PromptPreviewMod
       {/* Modal 内容 */}
       <div
         className={`
-          relative w-full max-w-2xl max-h-[90vh] bg-base-100 rounded-2xl shadow-2xl
+          nc-panel relative w-full max-w-2xl max-h-[90vh] rounded-2xl
           overflow-hidden flex flex-col
           transition-all duration-200 ease-out
           ${
@@ -121,8 +121,8 @@ export function PromptPreviewModal({ prompt, isOpen, onClose }: PromptPreviewMod
         `}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* 渐变头部 */}
-        <div className="relative bg-gradient-to-r from-primary/20 via-secondary/20 to-accent/20 p-4">
+        {/* 头部 */}
+        <div className="relative border-b border-base-300 bg-base-100 p-4">
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1 min-w-0">
               <h2 className="text-lg font-bold truncate">{prompt.title}</h2>
@@ -141,7 +141,7 @@ export function PromptPreviewModal({ prompt, isOpen, onClose }: PromptPreviewMod
             {prompt.tags.map((tag) => (
               <span
                 key={tag}
-                className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-base-100/50 rounded-full"
+                className="nc-badge inline-flex items-center gap-1"
               >
                 <Tag className="w-3 h-3" />
                 {tag}
@@ -163,10 +163,10 @@ export function PromptPreviewModal({ prompt, isOpen, onClose }: PromptPreviewMod
             <div
               className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium ${
                 prompt.nodeTemplate.generatorType === "pro"
-                  ? "bg-gradient-to-r from-purple-500/15 to-pink-500/15 text-purple-600 dark:text-purple-400"
+                  ? "bg-base-200 text-base-content"
                   : prompt.nodeTemplate.generatorType === "nb2"
-                    ? "bg-gradient-to-r from-cyan-500/15 to-blue-500/15 text-cyan-600 dark:text-cyan-400"
-                    : "bg-gradient-to-r from-amber-500/15 to-orange-500/15 text-amber-600 dark:text-amber-400"
+                    ? "bg-primary/10 text-primary"
+                    : "bg-warning/10 text-warning"
               }`}
             >
               {prompt.nodeTemplate.generatorType === "pro" ? (

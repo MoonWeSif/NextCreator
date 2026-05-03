@@ -1,16 +1,16 @@
-mod storage;
+mod dalle;
 mod gemini;
 mod llm;
-mod video;
-mod dalle;
+mod storage;
 mod text_removal;
+mod video;
 
-use storage::*;
+use dalle::*;
 use gemini::*;
 use llm::*;
-use video::*;
-use dalle::*;
+use storage::*;
 use text_removal::*;
+use video::*;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -40,6 +40,8 @@ pub fn run() {
             video_create_task,
             video_get_status,
             video_get_content,
+            newapi_video_create_task,
+            newapi_video_get_status,
             // Veo 视频服务命令
             veo_create_task,
             veo_get_status,

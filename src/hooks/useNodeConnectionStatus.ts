@@ -1,5 +1,10 @@
 import { useMemo } from "react";
 import { useFlowStore } from "@/stores/flowStore";
+import {
+  isFileInputEdge,
+  isImageInputEdge,
+  isPromptInputEdge,
+} from "@/utils/connectionHandles";
 
 /**
  * 节点连接状态 Hook
@@ -33,11 +38,10 @@ export function useNodeConnectionStatus(nodeId: string) {
     for (const edge of incomingEdges) {
       const sourceNode = nodes.find((n) => n.id === edge.source);
       if (!sourceNode) continue;
-
-      const targetHandle = edge.targetHandle;
+      const targetNode = nodes.find((n) => n.id === edge.target);
 
       // 检测提示词连接
-      if (targetHandle === "input-prompt" || (!targetHandle && (sourceNode.type === "promptNode" || sourceNode.type === "llmContentNode"))) {
+      if (isPromptInputEdge(edge, sourceNode, targetNode)) {
         hasPromptConnection = true;
         if (sourceNode.type === "promptNode") {
           const data = sourceNode.data as { prompt?: string };
@@ -49,7 +53,7 @@ export function useNodeConnectionStatus(nodeId: string) {
       }
 
       // 检测图片输入
-      if (targetHandle === "input-image" || (!targetHandle && sourceNode.type === "imageInputNode")) {
+      if (isImageInputEdge(edge, sourceNode, targetNode)) {
         if (sourceNode.type === "imageInputNode") {
           const data = sourceNode.data as { imageData?: string; imagePath?: string; label?: string };
           if (!data.imageData && !data.imagePath) {
@@ -70,11 +74,21 @@ export function useNodeConnectionStatus(nodeId: string) {
           } else {
             imageCount++;
           }
+        } else if (sourceNode.type === "videoGeneratorNode") {
+          const data = sourceNode.data as { outputVideo?: string; videoData?: string; label?: string };
+          if (!data.outputVideo && !data.videoData) {
+            emptyImages.push({
+              id: sourceNode.id,
+              label: (data.label as string) || "视频生成",
+            });
+          } else {
+            imageCount++;
+          }
         }
       }
 
       // 检测文件输入
-      if (targetHandle === "input-file" || (!targetHandle && sourceNode.type === "fileUploadNode")) {
+      if (isFileInputEdge(edge, sourceNode, targetNode)) {
         if (sourceNode.type === "fileUploadNode") {
           const data = sourceNode.data as { fileData?: string; label?: string };
           if (!data.fileData) {

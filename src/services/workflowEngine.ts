@@ -14,9 +14,15 @@ import { shouldSkipNode } from "@/types/workflow";
 import { nodeExecutor } from "./nodeExecutor";
 import { useFlowStore } from "@/stores/flowStore";
 import { useCanvasStore } from "@/stores/canvasStore";
+import { isPromptInputEdge } from "@/utils/connectionHandles";
 
 // 自定义节点类型
 type CustomNode = Node<CustomNodeData>;
+
+function hasInlinePrompt(node: CustomNode): boolean {
+  const data = node.data as { prompt?: unknown };
+  return typeof data.prompt === "string" && data.prompt.trim().length > 0;
+}
 
 /**
  * 工作流引擎类
@@ -331,23 +337,29 @@ export class WorkflowEngine {
     }
 
     const missingInputs: string[] = [];
+    const canUseInlinePrompt =
+      (nodeType === "imageGeneratorNode" || nodeType === "videoGeneratorNode" || nodeType === "llmContentNode") &&
+      hasInlinePrompt(node);
 
     // 获取上游连接
     const incomingEdges = this.currentEdges.filter((e) => e.target === nodeId);
 
     // 检查 prompt 输入
-    const promptEdge = incomingEdges.find((e) => e.targetHandle === "input-prompt" || !e.targetHandle);
+    const promptEdge = incomingEdges.find((edge) => {
+      const sourceNode = this.currentNodes.find((n) => n.id === edge.source);
+      return !!sourceNode && isPromptInputEdge(edge, sourceNode, node);
+    });
     if (promptEdge) {
       const sourceNode = this.currentNodes.find((n) => n.id === promptEdge.source);
       if (sourceNode) {
         if (sourceNode.type === "promptNode") {
           const data = sourceNode.data as { prompt?: string };
-          if (!data.prompt?.trim()) {
+          if (!data.prompt?.trim() && !canUseInlinePrompt) {
             missingInputs.push("提示词为空");
           }
         } else if (sourceNode.type === "llmContentNode") {
           const data = sourceNode.data as { outputContent?: string };
-          if (!data.outputContent?.trim()) {
+          if (!data.outputContent?.trim() && !canUseInlinePrompt) {
             missingInputs.push("LLM 输出为空（请先执行上游 LLM 节点）");
           }
         }
@@ -355,7 +367,7 @@ export class WorkflowEngine {
     } else {
       // 需要 prompt 输入的节点类型
       const needsPrompt = ["imageGeneratorNode", "videoGeneratorNode", "llmContentNode"];
-      if (needsPrompt.includes(nodeType)) {
+      if (needsPrompt.includes(nodeType) && !canUseInlinePrompt) {
         missingInputs.push("缺少提示词连接");
       }
     }

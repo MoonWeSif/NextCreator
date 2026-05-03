@@ -3,6 +3,7 @@
  */
 
 export { soraVideoProvider, SoraVideoProvider } from "./sora";
+export { newApiVideoProvider, NewApiVideoProvider } from "./newApiVideo";
 export { veoVideoProvider, VeoVideoProvider } from "./veo";
 export type {
   VeoGenerationRequest,

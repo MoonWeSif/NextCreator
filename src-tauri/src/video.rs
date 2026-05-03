@@ -1,7 +1,8 @@
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::time::Duration;
-use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 
 // ==================== 视频服务数据结构 ====================
 
@@ -15,7 +16,7 @@ pub struct VideoCreateParams {
     pub prompt: String,
     pub seconds: Option<String>,
     pub size: Option<String>,
-    pub input_image: Option<String>,  // base64 编码的参考图片
+    pub input_image: Option<String>, // base64 编码的参考图片
 }
 
 // 视频任务响应
@@ -30,6 +31,14 @@ pub struct VideoTaskResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub progress: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub video_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub format: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }
 
@@ -39,7 +48,7 @@ pub struct VideoTaskResult {
 pub struct VideoContentResult {
     pub success: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub video_data: Option<String>,  // base64 编码的视频数据
+    pub video_data: Option<String>, // base64 编码的视频数据
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }
@@ -51,6 +60,64 @@ pub struct VideoStatusParams {
     pub base_url: String,
     pub api_key: String,
     pub task_id: String,
+}
+
+// new-api 通用视频创建任务参数
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NewApiVideoCreateParams {
+    pub base_url: String,
+    pub api_key: String,
+    pub model: String,
+    pub prompt: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duration: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub width: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub height: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fps: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seed: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub n: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub response_format: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<Value>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct NewApiVideoRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duration: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub width: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub height: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fps: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seed: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub n: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub response_format: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<Value>,
 }
 
 // API 响应结构
@@ -65,6 +132,82 @@ struct VideoApiResponse {
 #[derive(Debug, Deserialize)]
 struct VideoApiError {
     message: Option<String>,
+}
+
+fn empty_video_task_result(error: Option<String>) -> VideoTaskResult {
+    VideoTaskResult {
+        success: false,
+        task_id: None,
+        status: None,
+        progress: None,
+        video_url: None,
+        format: None,
+        metadata: None,
+        raw: None,
+        error,
+    }
+}
+
+fn parse_task_response(
+    response_text: &str,
+    fallback_task_id: Option<String>,
+) -> Result<VideoTaskResult, String> {
+    let raw: Value =
+        serde_json::from_str(response_text).map_err(|e| format!("解析响应失败: {}", e))?;
+
+    let error_message = raw.get("error").and_then(|error| {
+        if error.is_string() {
+            error.as_str().map(|s| s.to_string())
+        } else {
+            error
+                .get("message")
+                .and_then(|message| message.as_str())
+                .map(|s| s.to_string())
+                .or_else(|| error.get("code").map(|code| code.to_string()))
+        }
+    });
+
+    let task_id = raw
+        .get("task_id")
+        .and_then(|value| value.as_str())
+        .or_else(|| raw.get("id").and_then(|value| value.as_str()))
+        .map(|s| s.to_string())
+        .or(fallback_task_id);
+
+    let status = raw
+        .get("status")
+        .and_then(|value| value.as_str())
+        .map(|s| s.to_string());
+
+    let progress = raw
+        .get("progress")
+        .and_then(|value| value.as_i64())
+        .map(|value| value as i32);
+
+    let video_url = raw
+        .get("url")
+        .and_then(|value| value.as_str())
+        .or_else(|| raw.get("video_url").and_then(|value| value.as_str()))
+        .map(|s| s.to_string());
+
+    let format = raw
+        .get("format")
+        .and_then(|value| value.as_str())
+        .map(|s| s.to_string());
+
+    let metadata = raw.get("metadata").cloned();
+
+    Ok(VideoTaskResult {
+        success: error_message.is_none(),
+        task_id,
+        status,
+        progress,
+        video_url,
+        format,
+        metadata,
+        raw: Some(raw),
+        error: error_message,
+    })
 }
 
 // ==================== Veo 视频服务数据结构 ====================
@@ -109,7 +252,7 @@ pub struct VeoCreateParams {
     pub api_key: String,
     pub model: String,
     pub prompt: String,
-    pub images: Option<Vec<String>>,  // base64 编码的图片数组
+    pub images: Option<Vec<String>>, // base64 编码的图片数组
     pub metadata: Option<VeoMetadata>,
 }
 
@@ -133,10 +276,7 @@ pub async fn video_create_task(params: VideoCreateParams) -> VideoTaskResult {
     println!("[Rust] model: {}", params.model);
 
     // 创建 HTTP 客户端
-    let client = match Client::builder()
-        .timeout(Duration::from_secs(60))
-        .build()
-    {
+    let client = match Client::builder().timeout(Duration::from_secs(60)).build() {
         Ok(c) => c,
         Err(e) => {
             return VideoTaskResult {
@@ -144,6 +284,10 @@ pub async fn video_create_task(params: VideoCreateParams) -> VideoTaskResult {
                 task_id: None,
                 status: None,
                 progress: None,
+                video_url: None,
+                format: None,
+                metadata: None,
+                raw: None,
                 error: Some(format!("创建 HTTP 客户端失败: {}", e)),
             }
         }
@@ -179,10 +323,7 @@ pub async fn video_create_task(params: VideoCreateParams) -> VideoTaskResult {
     }
 
     // 构建 URL
-    let url = format!(
-        "{}/v1/videos",
-        params.base_url.trim_end_matches('/')
-    );
+    let url = format!("{}/v1/videos", params.base_url.trim_end_matches('/'));
     println!("[Rust] Request URL: {}", url);
 
     // 发送请求
@@ -199,7 +340,7 @@ pub async fn video_create_task(params: VideoCreateParams) -> VideoTaskResult {
         Ok(r) => {
             println!("[Rust] Response received in {:?}", start_time.elapsed());
             r
-        },
+        }
         Err(e) => {
             println!("[Rust] Request failed: {}", e);
             let error_msg = if e.is_timeout() {
@@ -214,6 +355,10 @@ pub async fn video_create_task(params: VideoCreateParams) -> VideoTaskResult {
                 task_id: None,
                 status: None,
                 progress: None,
+                video_url: None,
+                format: None,
+                metadata: None,
+                raw: None,
                 error: Some(error_msg),
             };
         }
@@ -229,6 +374,10 @@ pub async fn video_create_task(params: VideoCreateParams) -> VideoTaskResult {
                 task_id: None,
                 status: None,
                 progress: None,
+                video_url: None,
+                format: None,
+                metadata: None,
+                raw: None,
                 error: Some(format!("获取响应失败: {}", e)),
             };
         }
@@ -241,6 +390,10 @@ pub async fn video_create_task(params: VideoCreateParams) -> VideoTaskResult {
             task_id: None,
             status: None,
             progress: None,
+            video_url: None,
+            format: None,
+            metadata: None,
+            raw: None,
             error: Some(format!("API 返回错误 ({}): {}", status, response_text)),
         };
     }
@@ -256,6 +409,10 @@ pub async fn video_create_task(params: VideoCreateParams) -> VideoTaskResult {
                 task_id: None,
                 status: None,
                 progress: None,
+                video_url: None,
+                format: None,
+                metadata: None,
+                raw: None,
                 error: Some(format!("解析响应失败: {}", e)),
             };
         }
@@ -268,6 +425,10 @@ pub async fn video_create_task(params: VideoCreateParams) -> VideoTaskResult {
             task_id: None,
             status: None,
             progress: None,
+            video_url: None,
+            format: None,
+            metadata: None,
+            raw: None,
             error: err.message,
         };
     }
@@ -279,6 +440,10 @@ pub async fn video_create_task(params: VideoCreateParams) -> VideoTaskResult {
             task_id: None,
             status: None,
             progress: None,
+            video_url: None,
+            format: None,
+            metadata: None,
+            raw: None,
             error: Some("API 未返回任务 ID".to_string()),
         };
     }
@@ -290,6 +455,10 @@ pub async fn video_create_task(params: VideoCreateParams) -> VideoTaskResult {
         task_id,
         status: api_response.status,
         progress: api_response.progress,
+        video_url: None,
+        format: None,
+        metadata: None,
+        raw: None,
         error: None,
     }
 }
@@ -298,13 +467,13 @@ pub async fn video_create_task(params: VideoCreateParams) -> VideoTaskResult {
 
 #[tauri::command]
 pub async fn video_get_status(params: VideoStatusParams) -> VideoTaskResult {
-    println!("[Rust] video_get_status called, task_id: {}", params.task_id);
+    println!(
+        "[Rust] video_get_status called, task_id: {}",
+        params.task_id
+    );
 
     // 创建 HTTP 客户端
-    let client = match Client::builder()
-        .timeout(Duration::from_secs(30))
-        .build()
-    {
+    let client = match Client::builder().timeout(Duration::from_secs(30)).build() {
         Ok(c) => c,
         Err(e) => {
             return VideoTaskResult {
@@ -312,6 +481,10 @@ pub async fn video_get_status(params: VideoStatusParams) -> VideoTaskResult {
                 task_id: None,
                 status: None,
                 progress: None,
+                video_url: None,
+                format: None,
+                metadata: None,
+                raw: None,
                 error: Some(format!("创建 HTTP 客户端失败: {}", e)),
             }
         }
@@ -345,6 +518,10 @@ pub async fn video_get_status(params: VideoStatusParams) -> VideoTaskResult {
                 task_id: None,
                 status: None,
                 progress: None,
+                video_url: None,
+                format: None,
+                metadata: None,
+                raw: None,
                 error: Some(error_msg),
             };
         }
@@ -360,6 +537,10 @@ pub async fn video_get_status(params: VideoStatusParams) -> VideoTaskResult {
                 task_id: None,
                 status: None,
                 progress: None,
+                video_url: None,
+                format: None,
+                metadata: None,
+                raw: None,
                 error: Some(format!("获取响应失败: {}", e)),
             };
         }
@@ -371,6 +552,10 @@ pub async fn video_get_status(params: VideoStatusParams) -> VideoTaskResult {
             task_id: None,
             status: None,
             progress: None,
+            video_url: None,
+            format: None,
+            metadata: None,
+            raw: None,
             error: Some(format!("API 返回错误 ({}): {}", status, response_text)),
         };
     }
@@ -384,6 +569,10 @@ pub async fn video_get_status(params: VideoStatusParams) -> VideoTaskResult {
                 task_id: None,
                 status: None,
                 progress: None,
+                video_url: None,
+                format: None,
+                metadata: None,
+                raw: None,
                 error: Some(format!("解析响应失败: {}", e)),
             };
         }
@@ -396,6 +585,10 @@ pub async fn video_get_status(params: VideoStatusParams) -> VideoTaskResult {
             task_id: Some(params.task_id),
             status: api_response.status,
             progress: api_response.progress,
+            video_url: None,
+            format: None,
+            metadata: None,
+            raw: None,
             error: err.message,
         };
     }
@@ -405,21 +598,162 @@ pub async fn video_get_status(params: VideoStatusParams) -> VideoTaskResult {
         task_id: Some(params.task_id),
         status: api_response.status,
         progress: api_response.progress,
+        video_url: None,
+        format: None,
+        metadata: None,
+        raw: None,
         error: None,
     }
 }
 
 // ==================== 获取视频内容 ====================
 
+// ==================== new-api 通用视频任务 ====================
+
+#[tauri::command]
+pub async fn newapi_video_create_task(params: NewApiVideoCreateParams) -> VideoTaskResult {
+    println!("[Rust] newapi_video_create_task called");
+    println!("[Rust] base_url: {}", params.base_url);
+    println!("[Rust] model: {}", params.model);
+
+    let client = match Client::builder().timeout(Duration::from_secs(120)).build() {
+        Ok(c) => c,
+        Err(e) => return empty_video_task_result(Some(format!("创建 HTTP 客户端失败: {}", e))),
+    };
+
+    let request_body = NewApiVideoRequest {
+        model: Some(params.model.clone()),
+        prompt: Some(params.prompt.clone()),
+        image: params.image.clone(),
+        duration: params.duration,
+        width: params.width,
+        height: params.height,
+        fps: params.fps,
+        seed: params.seed,
+        n: params.n,
+        response_format: params.response_format.clone(),
+        user: params.user.clone(),
+        metadata: params.metadata.clone(),
+    };
+
+    let url = format!(
+        "{}/v1/video/generations",
+        params.base_url.trim_end_matches('/')
+    );
+    println!("[Rust] Request URL: {}", url);
+
+    let response = match client
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", params.api_key))
+        .header("Content-Type", "application/json")
+        .json(&request_body)
+        .send()
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            let error_msg = if e.is_timeout() {
+                "请求超时，请稍后重试".to_string()
+            } else if e.is_connect() {
+                "无法连接到服务器，请检查网络".to_string()
+            } else {
+                format!("请求失败: {}", e)
+            };
+            return empty_video_task_result(Some(error_msg));
+        }
+    };
+
+    let status = response.status();
+    let response_text = match response.text().await {
+        Ok(t) => t,
+        Err(e) => return empty_video_task_result(Some(format!("获取响应失败: {}", e))),
+    };
+
+    if !status.is_success() {
+        println!("[Rust] Error response: {}", response_text);
+        return empty_video_task_result(Some(format!(
+            "API 返回错误 ({}): {}",
+            status, response_text
+        )));
+    }
+
+    match parse_task_response(&response_text, None) {
+        Ok(mut result) => {
+            if result.task_id.is_none() {
+                result.success = false;
+                result.error = Some("API 未返回任务 ID".to_string());
+            }
+            result
+        }
+        Err(e) => empty_video_task_result(Some(e)),
+    }
+}
+
+#[tauri::command]
+pub async fn newapi_video_get_status(params: VideoStatusParams) -> VideoTaskResult {
+    println!(
+        "[Rust] newapi_video_get_status called, task_id: {}",
+        params.task_id
+    );
+
+    let client = match Client::builder().timeout(Duration::from_secs(30)).build() {
+        Ok(c) => c,
+        Err(e) => return empty_video_task_result(Some(format!("创建 HTTP 客户端失败: {}", e))),
+    };
+
+    let url = format!(
+        "{}/v1/video/generations/{}",
+        params.base_url.trim_end_matches('/'),
+        params.task_id
+    );
+
+    let response = match client
+        .get(&url)
+        .header("Authorization", format!("Bearer {}", params.api_key))
+        .send()
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            let error_msg = if e.is_timeout() {
+                "请求超时".to_string()
+            } else if e.is_connect() {
+                "无法连接到服务器".to_string()
+            } else {
+                format!("请求失败: {}", e)
+            };
+            return empty_video_task_result(Some(error_msg));
+        }
+    };
+
+    let status = response.status();
+    let response_text = match response.text().await {
+        Ok(t) => t,
+        Err(e) => return empty_video_task_result(Some(format!("获取响应失败: {}", e))),
+    };
+
+    if !status.is_success() {
+        return empty_video_task_result(Some(format!(
+            "API 返回错误 ({}): {}",
+            status, response_text
+        )));
+    }
+
+    match parse_task_response(&response_text, Some(params.task_id)) {
+        Ok(result) => result,
+        Err(e) => empty_video_task_result(Some(e)),
+    }
+}
+
 #[tauri::command]
 pub async fn video_get_content(params: VideoStatusParams) -> VideoContentResult {
-    println!("[Rust] video_get_content called, task_id: {}", params.task_id);
+    println!(
+        "[Rust] video_get_content called, task_id: {}",
+        params.task_id
+    );
 
     // 创建 HTTP 客户端（视频下载可能需要更长时间）
-    let client = match Client::builder()
-        .timeout(Duration::from_secs(300))
-        .build()
-    {
+    let client = match Client::builder().timeout(Duration::from_secs(300)).build() {
         Ok(c) => c,
         Err(e) => {
             return VideoContentResult {
@@ -447,9 +781,12 @@ pub async fn video_get_content(params: VideoStatusParams) -> VideoContentResult 
         .await
     {
         Ok(r) => {
-            println!("[Rust] Response headers received in {:?}", start_time.elapsed());
+            println!(
+                "[Rust] Response headers received in {:?}",
+                start_time.elapsed()
+            );
             r
-        },
+        }
         Err(e) => {
             let error_msg = if e.is_timeout() {
                 "下载超时，请稍后重试".to_string()
@@ -489,7 +826,11 @@ pub async fn video_get_content(params: VideoStatusParams) -> VideoContentResult 
         }
     };
 
-    println!("[Rust] Video downloaded: {} bytes in {:?}", video_bytes.len(), start_time.elapsed());
+    println!(
+        "[Rust] Video downloaded: {} bytes in {:?}",
+        video_bytes.len(),
+        start_time.elapsed()
+    );
 
     // 转换为 base64
     let video_base64 = BASE64.encode(&video_bytes);
@@ -511,7 +852,7 @@ pub async fn veo_create_task(params: VeoCreateParams) -> VideoTaskResult {
 
     // 创建 HTTP 客户端
     let client = match Client::builder()
-        .timeout(Duration::from_secs(120))  // Veo 可能需要更长时间
+        .timeout(Duration::from_secs(120)) // Veo 可能需要更长时间
         .build()
     {
         Ok(c) => c,
@@ -521,6 +862,10 @@ pub async fn veo_create_task(params: VeoCreateParams) -> VideoTaskResult {
                 task_id: None,
                 status: None,
                 progress: None,
+                video_url: None,
+                format: None,
+                metadata: None,
+                raw: None,
                 error: Some(format!("创建 HTTP 客户端失败: {}", e)),
             }
         }
@@ -535,10 +880,7 @@ pub async fn veo_create_task(params: VeoCreateParams) -> VideoTaskResult {
     };
 
     // 构建 URL
-    let url = format!(
-        "{}/v1/videos",
-        params.base_url.trim_end_matches('/')
-    );
+    let url = format!("{}/v1/videos", params.base_url.trim_end_matches('/'));
     println!("[Rust] Request URL: {}", url);
 
     // 发送请求
@@ -556,7 +898,7 @@ pub async fn veo_create_task(params: VeoCreateParams) -> VideoTaskResult {
         Ok(r) => {
             println!("[Rust] Response received in {:?}", start_time.elapsed());
             r
-        },
+        }
         Err(e) => {
             println!("[Rust] Request failed: {}", e);
             let error_msg = if e.is_timeout() {
@@ -571,6 +913,10 @@ pub async fn veo_create_task(params: VeoCreateParams) -> VideoTaskResult {
                 task_id: None,
                 status: None,
                 progress: None,
+                video_url: None,
+                format: None,
+                metadata: None,
+                raw: None,
                 error: Some(error_msg),
             };
         }
@@ -586,6 +932,10 @@ pub async fn veo_create_task(params: VeoCreateParams) -> VideoTaskResult {
                 task_id: None,
                 status: None,
                 progress: None,
+                video_url: None,
+                format: None,
+                metadata: None,
+                raw: None,
                 error: Some(format!("获取响应失败: {}", e)),
             };
         }
@@ -598,6 +948,10 @@ pub async fn veo_create_task(params: VeoCreateParams) -> VideoTaskResult {
             task_id: None,
             status: None,
             progress: None,
+            video_url: None,
+            format: None,
+            metadata: None,
+            raw: None,
             error: Some(format!("API 返回错误 ({}): {}", status, response_text)),
         };
     }
@@ -622,6 +976,10 @@ pub async fn veo_create_task(params: VeoCreateParams) -> VideoTaskResult {
                 task_id: None,
                 status: None,
                 progress: None,
+                video_url: None,
+                format: None,
+                metadata: None,
+                raw: None,
                 error: Some(format!("解析响应失败: {}", e)),
             };
         }
@@ -634,6 +992,10 @@ pub async fn veo_create_task(params: VeoCreateParams) -> VideoTaskResult {
             task_id: None,
             status: None,
             progress: None,
+            video_url: None,
+            format: None,
+            metadata: None,
+            raw: None,
             error: err.message,
         };
     }
@@ -646,6 +1008,10 @@ pub async fn veo_create_task(params: VeoCreateParams) -> VideoTaskResult {
             task_id: None,
             status: None,
             progress: None,
+            video_url: None,
+            format: None,
+            metadata: None,
+            raw: None,
             error: Some("API 未返回任务 ID".to_string()),
         };
     }
@@ -657,6 +1023,10 @@ pub async fn veo_create_task(params: VeoCreateParams) -> VideoTaskResult {
         task_id,
         status: api_response.status,
         progress: api_response.progress,
+        video_url: None,
+        format: None,
+        metadata: None,
+        raw: None,
         error: None,
     }
 }
@@ -668,10 +1038,7 @@ pub async fn veo_get_status(params: VideoStatusParams) -> VideoTaskResult {
     println!("[Rust] veo_get_status called, task_id: {}", params.task_id);
 
     // 创建 HTTP 客户端
-    let client = match Client::builder()
-        .timeout(Duration::from_secs(30))
-        .build()
-    {
+    let client = match Client::builder().timeout(Duration::from_secs(30)).build() {
         Ok(c) => c,
         Err(e) => {
             return VideoTaskResult {
@@ -679,6 +1046,10 @@ pub async fn veo_get_status(params: VideoStatusParams) -> VideoTaskResult {
                 task_id: None,
                 status: None,
                 progress: None,
+                video_url: None,
+                format: None,
+                metadata: None,
+                raw: None,
                 error: Some(format!("创建 HTTP 客户端失败: {}", e)),
             }
         }
@@ -712,6 +1083,10 @@ pub async fn veo_get_status(params: VideoStatusParams) -> VideoTaskResult {
                 task_id: None,
                 status: None,
                 progress: None,
+                video_url: None,
+                format: None,
+                metadata: None,
+                raw: None,
                 error: Some(error_msg),
             };
         }
@@ -727,6 +1102,10 @@ pub async fn veo_get_status(params: VideoStatusParams) -> VideoTaskResult {
                 task_id: None,
                 status: None,
                 progress: None,
+                video_url: None,
+                format: None,
+                metadata: None,
+                raw: None,
                 error: Some(format!("获取响应失败: {}", e)),
             };
         }
@@ -738,6 +1117,10 @@ pub async fn veo_get_status(params: VideoStatusParams) -> VideoTaskResult {
             task_id: None,
             status: None,
             progress: None,
+            video_url: None,
+            format: None,
+            metadata: None,
+            raw: None,
             error: Some(format!("API 返回错误 ({}): {}", status, response_text)),
         };
     }
@@ -751,6 +1134,10 @@ pub async fn veo_get_status(params: VideoStatusParams) -> VideoTaskResult {
                 task_id: None,
                 status: None,
                 progress: None,
+                video_url: None,
+                format: None,
+                metadata: None,
+                raw: None,
                 error: Some(format!("解析响应失败: {}", e)),
             };
         }
@@ -763,6 +1150,10 @@ pub async fn veo_get_status(params: VideoStatusParams) -> VideoTaskResult {
             task_id: Some(params.task_id),
             status: api_response.status,
             progress: api_response.progress,
+            video_url: None,
+            format: None,
+            metadata: None,
+            raw: None,
             error: err.message,
         };
     }
@@ -772,6 +1163,10 @@ pub async fn veo_get_status(params: VideoStatusParams) -> VideoTaskResult {
         task_id: Some(params.task_id),
         status: api_response.status,
         progress: api_response.progress,
+        video_url: None,
+        format: None,
+        metadata: None,
+        raw: None,
         error: None,
     }
 }
@@ -783,10 +1178,7 @@ pub async fn veo_get_content(params: VideoStatusParams) -> VideoContentResult {
     println!("[Rust] veo_get_content called, task_id: {}", params.task_id);
 
     // 创建 HTTP 客户端（视频下载可能需要更长时间）
-    let client = match Client::builder()
-        .timeout(Duration::from_secs(300))
-        .build()
-    {
+    let client = match Client::builder().timeout(Duration::from_secs(300)).build() {
         Ok(c) => c,
         Err(e) => {
             return VideoContentResult {
@@ -814,9 +1206,12 @@ pub async fn veo_get_content(params: VideoStatusParams) -> VideoContentResult {
         .await
     {
         Ok(r) => {
-            println!("[Rust] Response headers received in {:?}", start_time.elapsed());
+            println!(
+                "[Rust] Response headers received in {:?}",
+                start_time.elapsed()
+            );
             r
-        },
+        }
         Err(e) => {
             let error_msg = if e.is_timeout() {
                 "下载超时，请稍后重试".to_string()
@@ -856,7 +1251,11 @@ pub async fn veo_get_content(params: VideoStatusParams) -> VideoContentResult {
         }
     };
 
-    println!("[Rust] Veo video downloaded: {} bytes in {:?}", video_bytes.len(), start_time.elapsed());
+    println!(
+        "[Rust] Veo video downloaded: {} bytes in {:?}",
+        video_bytes.len(),
+        start_time.elapsed()
+    );
 
     // 转换为 base64
     let video_base64 = BASE64.encode(&video_bytes);
@@ -890,9 +1289,9 @@ pub struct KlingCreateParams {
     pub api_key: String,
     pub model: String,
     pub prompt: String,
-    pub mode: String,  // "text2video" 或 "image2video"
+    pub mode: String, // "text2video" 或 "image2video"
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub image: Option<String>,  // base64 编码的图片或 URL
+    pub image: Option<String>, // base64 编码的图片或 URL
     #[serde(skip_serializing_if = "Option::is_none")]
     pub duration: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -916,7 +1315,7 @@ pub struct KlingStatusParams {
     pub base_url: String,
     pub api_key: String,
     pub task_id: String,
-    pub mode: String,  // "text2video" 或 "image2video"
+    pub mode: String, // "text2video" 或 "image2video"
 }
 
 // Kling API 请求体
@@ -952,7 +1351,7 @@ pub struct KlingContentResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub video_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub video_data: Option<String>,  // base64 编码的视频数据
+    pub video_data: Option<String>, // base64 编码的视频数据
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }
@@ -974,10 +1373,7 @@ pub async fn kling_create_task(params: KlingCreateParams) -> VideoTaskResult {
     println!("[Rust] mode: {}", params.mode);
 
     // 创建 HTTP 客户端
-    let client = match Client::builder()
-        .timeout(Duration::from_secs(120))
-        .build()
-    {
+    let client = match Client::builder().timeout(Duration::from_secs(120)).build() {
         Ok(c) => c,
         Err(e) => {
             return VideoTaskResult {
@@ -985,6 +1381,10 @@ pub async fn kling_create_task(params: KlingCreateParams) -> VideoTaskResult {
                 task_id: None,
                 status: None,
                 progress: None,
+                video_url: None,
+                format: None,
+                metadata: None,
+                raw: None,
                 error: Some(format!("创建 HTTP 客户端失败: {}", e)),
             }
         }
@@ -1033,7 +1433,7 @@ pub async fn kling_create_task(params: KlingCreateParams) -> VideoTaskResult {
         Ok(r) => {
             println!("[Rust] Response received in {:?}", start_time.elapsed());
             r
-        },
+        }
         Err(e) => {
             println!("[Rust] Request failed: {}", e);
             let error_msg = if e.is_timeout() {
@@ -1048,6 +1448,10 @@ pub async fn kling_create_task(params: KlingCreateParams) -> VideoTaskResult {
                 task_id: None,
                 status: None,
                 progress: None,
+                video_url: None,
+                format: None,
+                metadata: None,
+                raw: None,
                 error: Some(error_msg),
             };
         }
@@ -1063,6 +1467,10 @@ pub async fn kling_create_task(params: KlingCreateParams) -> VideoTaskResult {
                 task_id: None,
                 status: None,
                 progress: None,
+                video_url: None,
+                format: None,
+                metadata: None,
+                raw: None,
                 error: Some(format!("获取响应失败: {}", e)),
             };
         }
@@ -1093,6 +1501,10 @@ pub async fn kling_create_task(params: KlingCreateParams) -> VideoTaskResult {
                     task_id: None,
                     status: None,
                     progress: None,
+                    video_url: None,
+                    format: None,
+                    metadata: None,
+                    raw: None,
                     error: err.message.or(Some(format!("API 错误: {}", status))),
                 };
             }
@@ -1103,6 +1515,10 @@ pub async fn kling_create_task(params: KlingCreateParams) -> VideoTaskResult {
             task_id: None,
             status: None,
             progress: None,
+            video_url: None,
+            format: None,
+            metadata: None,
+            raw: None,
             error: Some(format!("API 返回错误 ({}): {}", status, response_text)),
         };
     }
@@ -1124,6 +1540,10 @@ pub async fn kling_create_task(params: KlingCreateParams) -> VideoTaskResult {
                 task_id: None,
                 status: None,
                 progress: None,
+                video_url: None,
+                format: None,
+                metadata: None,
+                raw: None,
                 error: Some(format!("解析响应失败: {}", e)),
             };
         }
@@ -1136,6 +1556,10 @@ pub async fn kling_create_task(params: KlingCreateParams) -> VideoTaskResult {
             task_id: None,
             status: None,
             progress: None,
+            video_url: None,
+            format: None,
+            metadata: None,
+            raw: None,
             error: Some("API 未返回任务 ID".to_string()),
         };
     }
@@ -1147,6 +1571,10 @@ pub async fn kling_create_task(params: KlingCreateParams) -> VideoTaskResult {
         task_id,
         status: api_response.status,
         progress: None,
+        video_url: None,
+        format: None,
+        metadata: None,
+        raw: None,
         error: None,
     }
 }
@@ -1155,13 +1583,13 @@ pub async fn kling_create_task(params: KlingCreateParams) -> VideoTaskResult {
 
 #[tauri::command]
 pub async fn kling_get_status(params: KlingStatusParams) -> VideoTaskResult {
-    println!("[Rust] kling_get_status called, task_id: {}, mode: {}", params.task_id, params.mode);
+    println!(
+        "[Rust] kling_get_status called, task_id: {}, mode: {}",
+        params.task_id, params.mode
+    );
 
     // 创建 HTTP 客户端
-    let client = match Client::builder()
-        .timeout(Duration::from_secs(30))
-        .build()
-    {
+    let client = match Client::builder().timeout(Duration::from_secs(30)).build() {
         Ok(c) => c,
         Err(e) => {
             return VideoTaskResult {
@@ -1169,6 +1597,10 @@ pub async fn kling_get_status(params: KlingStatusParams) -> VideoTaskResult {
                 task_id: None,
                 status: None,
                 progress: None,
+                video_url: None,
+                format: None,
+                metadata: None,
+                raw: None,
                 error: Some(format!("创建 HTTP 客户端失败: {}", e)),
             }
         }
@@ -1210,6 +1642,10 @@ pub async fn kling_get_status(params: KlingStatusParams) -> VideoTaskResult {
                 task_id: None,
                 status: None,
                 progress: None,
+                video_url: None,
+                format: None,
+                metadata: None,
+                raw: None,
                 error: Some(error_msg),
             };
         }
@@ -1225,6 +1661,10 @@ pub async fn kling_get_status(params: KlingStatusParams) -> VideoTaskResult {
                 task_id: None,
                 status: None,
                 progress: None,
+                video_url: None,
+                format: None,
+                metadata: None,
+                raw: None,
                 error: Some(format!("获取响应失败: {}", e)),
             };
         }
@@ -1238,6 +1678,10 @@ pub async fn kling_get_status(params: KlingStatusParams) -> VideoTaskResult {
             task_id: None,
             status: None,
             progress: None,
+            video_url: None,
+            format: None,
+            metadata: None,
+            raw: None,
             error: Some(format!("API 返回错误 ({}): {}", status, response_text)),
         };
     }
@@ -1268,6 +1712,10 @@ pub async fn kling_get_status(params: KlingStatusParams) -> VideoTaskResult {
                 task_id: None,
                 status: None,
                 progress: None,
+                video_url: None,
+                format: None,
+                metadata: None,
+                raw: None,
                 error: Some(format!("解析响应失败: {}", e)),
             };
         }
@@ -1281,6 +1729,10 @@ pub async fn kling_get_status(params: KlingStatusParams) -> VideoTaskResult {
                 task_id: Some(params.task_id),
                 status: api_response.status,
                 progress: None,
+                video_url: None,
+                format: None,
+                metadata: None,
+                raw: None,
                 error: err.message,
             };
         }
@@ -1291,6 +1743,10 @@ pub async fn kling_get_status(params: KlingStatusParams) -> VideoTaskResult {
         task_id: Some(params.task_id),
         status: api_response.status,
         progress: None,
+        video_url: None,
+        format: None,
+        metadata: None,
+        raw: None,
         error: None,
     }
 }
@@ -1299,13 +1755,13 @@ pub async fn kling_get_status(params: KlingStatusParams) -> VideoTaskResult {
 
 #[tauri::command]
 pub async fn kling_get_content(params: KlingStatusParams) -> KlingContentResult {
-    println!("[Rust] kling_get_content called, task_id: {}, mode: {}", params.task_id, params.mode);
+    println!(
+        "[Rust] kling_get_content called, task_id: {}, mode: {}",
+        params.task_id, params.mode
+    );
 
     // 创建 HTTP 客户端
-    let client = match Client::builder()
-        .timeout(Duration::from_secs(30))
-        .build()
-    {
+    let client = match Client::builder().timeout(Duration::from_secs(30)).build() {
         Ok(c) => c,
         Err(e) => {
             return KlingContentResult {
@@ -1435,13 +1891,13 @@ pub async fn kling_get_content(params: KlingStatusParams) -> KlingContentResult 
 
 #[tauri::command]
 pub async fn kling_download_video(params: KlingDownloadParams) -> VideoContentResult {
-    println!("[Rust] kling_download_video called, url: {}", params.video_url);
+    println!(
+        "[Rust] kling_download_video called, url: {}",
+        params.video_url
+    );
 
     // 创建 HTTP 客户端（视频下载可能需要更长时间）
-    let client = match Client::builder()
-        .timeout(Duration::from_secs(300))
-        .build()
-    {
+    let client = match Client::builder().timeout(Duration::from_secs(300)).build() {
         Ok(c) => c,
         Err(e) => {
             return VideoContentResult {
@@ -1454,15 +1910,14 @@ pub async fn kling_download_video(params: KlingDownloadParams) -> VideoContentRe
 
     // 发送请求下载视频
     let start_time = std::time::Instant::now();
-    let response = match client
-        .get(&params.video_url)
-        .send()
-        .await
-    {
+    let response = match client.get(&params.video_url).send().await {
         Ok(r) => {
-            println!("[Rust] Response headers received in {:?}", start_time.elapsed());
+            println!(
+                "[Rust] Response headers received in {:?}",
+                start_time.elapsed()
+            );
             r
-        },
+        }
         Err(e) => {
             let error_msg = if e.is_timeout() {
                 "下载超时，请稍后重试".to_string()
@@ -1502,7 +1957,11 @@ pub async fn kling_download_video(params: KlingDownloadParams) -> VideoContentRe
         }
     };
 
-    println!("[Rust] Kling video downloaded: {} bytes in {:?}", video_bytes.len(), start_time.elapsed());
+    println!(
+        "[Rust] Kling video downloaded: {} bytes in {:?}",
+        video_bytes.len(),
+        start_time.elapsed()
+    );
 
     // 转换为 base64
     let video_base64 = BASE64.encode(&video_bytes);

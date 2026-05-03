@@ -51,6 +51,18 @@ export function getNodeInputTypes(nodeType: string): HandleType[] {
   return config?.inputs || [];
 }
 
+function isUnifiedImageGeneratorInput(targetNodeType: string | undefined, targetHandle?: string | null) {
+  return targetNodeType === "imageGeneratorNode" && targetHandle === "input";
+}
+
+function isUnifiedVideoGeneratorInput(targetNodeType: string | undefined, targetHandle?: string | null) {
+  return targetNodeType === "videoGeneratorNode" && targetHandle === "input";
+}
+
+function isUnifiedLLMContentInput(targetNodeType: string | undefined, targetHandle?: string | null) {
+  return targetNodeType === "llmContentNode" && targetHandle === "input";
+}
+
 /**
  * 检查类型是否兼容
  * prompt 只能连 prompt 输入
@@ -204,7 +216,14 @@ export function validateConnection(
   // 5. 检查类型兼容性
   // 如果有 targetHandle，用它来确定期望的输入类型
   // 否则检查源类型是否在目标接受的类型中
-  if (targetHandle) {
+  if (isUnifiedImageGeneratorInput(targetNode.type, targetHandle) || isUnifiedVideoGeneratorInput(targetNode.type, targetHandle) || isUnifiedLLMContentInput(targetNode.type, targetHandle)) {
+    if (!areTypesCompatible(sourceOutputType, targetInputTypes)) {
+      return {
+        isValid: false,
+        reason: `类型不匹配：${sourceOutputType} 不能连接到 ${targetInputTypes.join("/")} 输入`,
+      };
+    }
+  } else if (targetHandle) {
     // targetHandle 格式: "input-prompt" 或 "input-image"
     const expectedType = targetHandle.replace("input-", "") as HandleType;
     if (sourceOutputType !== expectedType) {
@@ -241,11 +260,30 @@ export function validateConnection(
     targetNode.type === "pptContentNode" ||
     targetNode.type === "veoGeneratorNode";
 
+  const isUnifiedImageGeneratorImageInput =
+    isUnifiedImageGeneratorInput(targetNode.type, targetHandle) && sourceOutputType === "image";
+  const isUnifiedVideoGeneratorImageInput =
+    isUnifiedVideoGeneratorInput(targetNode.type, targetHandle) && sourceOutputType === "image";
+  const isUnifiedLLMContentImageInput =
+    isUnifiedLLMContentInput(targetNode.type, targetHandle) && sourceOutputType === "image";
+  const isUnifiedLLMContentFileInput =
+    isUnifiedLLMContentInput(targetNode.type, targetHandle) && sourceOutputType === "file";
+
   const isImageInput = targetHandle === "input-image" ||
+    isUnifiedImageGeneratorImageInput ||
+    isUnifiedVideoGeneratorImageInput ||
+    isUnifiedLLMContentImageInput ||
     (!targetHandle && sourceOutputType === "image");
 
   const isPromptInput = targetHandle === "input-prompt" ||
+    (isUnifiedImageGeneratorInput(targetNode.type, targetHandle) && sourceOutputType === "prompt") ||
+    (isUnifiedVideoGeneratorInput(targetNode.type, targetHandle) && sourceOutputType === "prompt") ||
+    (isUnifiedLLMContentInput(targetNode.type, targetHandle) && sourceOutputType === "prompt") ||
     (!targetHandle && sourceOutputType === "prompt");
+
+  const isFileInput = targetHandle === "input-file" ||
+    isUnifiedLLMContentFileInput ||
+    (!targetHandle && sourceOutputType === "file");
 
   // 如果是 prompt 输入，允许多个连接（会自动拼接文本）
   if (isPromptInput) {
@@ -284,6 +322,11 @@ export function validateConnection(
             const edgeSourceType = edgeSourceNode ? getNodeOutputType(edgeSourceNode.type || "") : undefined;
             return edgeSourceType === "image";
           }
+          if (edge.targetHandle === "input" && targetNode.type === "imageGeneratorNode") {
+            const edgeSourceNode = nodes.find((n) => n.id === edge.source);
+            const edgeSourceType = edgeSourceNode ? getNodeOutputType(edgeSourceNode.type || "") : undefined;
+            return edgeSourceType === "image";
+          }
           return false;
         });
 
@@ -292,6 +335,10 @@ export function validateConnection(
         }
       }
     }
+    return { isValid: true };
+  }
+
+  if (targetNode.type === "llmContentNode" && (isImageInput || isFileInput)) {
     return { isValid: true };
   }
 

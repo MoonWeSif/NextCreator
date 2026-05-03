@@ -78,7 +78,7 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
   return createPortal(
     <div
       ref={menuRef}
-      className="fixed z-[9999] min-w-[180px] py-1 bg-base-100 border border-base-300 rounded-lg shadow-xl"
+      className="nc-panel fixed z-[9999] min-w-[180px] py-1 rounded-lg"
       style={{ left: x, top: y }}
     >
       {items.map((item, index) => {

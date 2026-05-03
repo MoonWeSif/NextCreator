@@ -119,14 +119,16 @@ export const ImageInputNode = memo(({ id, data, selected }: NodeProps<ImageInput
   <>
     <div
       className={`
-        w-[200px] rounded-xl bg-base-100 shadow-lg border-2 transition-all
-        ${selected ? "border-primary shadow-primary/20" : "border-base-300"}
+        nc-node-card nc-node-accent-green w-[200px] transition-all
+        ${selected ? "nc-node-card-selected" : ""}
       `}
     >
       {/* 节点头部 */}
-      <div className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-green-500 to-emerald-500 rounded-t-lg">
-        <ImagePlus className="w-4 h-4 text-white" />
-        <span className="text-sm font-medium text-white">{data.label}</span>
+      <div className="nc-node-header nc-node-header-accent justify-start gap-2">
+        <span className="nc-node-header-icon">
+          <ImagePlus className="w-4 h-4" />
+        </span>
+        <span className="text-sm font-semibold truncate">{data.label}</span>
       </div>
 
       {/* 节点内容 */}
@@ -143,7 +145,7 @@ export const ImageInputNode = memo(({ id, data, selected }: NodeProps<ImageInput
           <div>
             {/* 图片预览 - 自适应高度展示完整图片 */}
             <div
-              className="w-full overflow-hidden rounded-lg bg-base-200 cursor-pointer group relative"
+              className="w-full overflow-hidden rounded-lg nc-soft-surface cursor-pointer group relative"
               onClick={() => setShowPreview(true)}
             >
               <img
@@ -208,7 +210,7 @@ export const ImageInputNode = memo(({ id, data, selected }: NodeProps<ImageInput
           </div>
         ) : (
           <button
-            className="btn btn-ghost w-full h-[120px] border-2 border-dashed border-base-300 hover:border-primary flex-col gap-1"
+            className="btn btn-ghost w-full h-[120px] border border-dashed border-base-300 hover:border-primary flex-col gap-1"
             onClick={() => fileInputRef.current?.click()}
             onPointerDown={(e) => e.stopPropagation()}
           >

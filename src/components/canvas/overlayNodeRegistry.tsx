@@ -13,7 +13,7 @@ import { LLMContentNode } from "@/components/nodes/LLMContentNode";
 import { FileUploadNode } from "@/components/nodes/FileUploadNode";
 
 export interface OverlayNodeHandleSpec {
-  id: string;
+  id?: string;
   type: "source" | "target";
   position: Position;
   className: string;
@@ -21,6 +21,8 @@ export interface OverlayNodeHandleSpec {
   label?: string;
   labelClassName?: string;
   title?: string;
+  isConnectable?: boolean;
+  showMarker?: boolean;
 }
 
 export interface OverlayNodeRenderProps {
@@ -75,7 +77,7 @@ const promptHandle: OverlayNodeHandleSpec = {
   id: "input-prompt",
   type: "target",
   position: Position.Left,
-  top: "30%",
+  top: "42%",
   className: "!w-3 !h-3 !bg-blue-500 !border-2 !border-white",
   label: "提示词",
   labelClassName: "-left-9",
@@ -85,10 +87,43 @@ const imageHandle: OverlayNodeHandleSpec = {
   id: "input-image",
   type: "target",
   position: Position.Left,
-  top: "70%",
+  top: "64%",
   className: "!w-3 !h-3 !bg-green-500 !border-2 !border-white",
   label: "参考图",
   labelClassName: "-left-9",
+};
+
+const imageGeneratorInputTop = 116;
+const videoGeneratorInputTop = 116;
+const llmContentInputTop = 116;
+
+const imageGeneratorUnifiedInputHandle: OverlayNodeHandleSpec = {
+  id: "input",
+  type: "target",
+  position: Position.Left,
+  top: imageGeneratorInputTop,
+  className: "canvas-node-minimal-handle canvas-node-minimal-handle-input",
+  title: "输入",
+};
+
+const imageGeneratorLegacyPromptHandle: OverlayNodeHandleSpec = {
+  id: "input-prompt",
+  type: "target",
+  position: Position.Left,
+  top: imageGeneratorInputTop,
+  className: "canvas-node-legacy-handle",
+  isConnectable: false,
+  showMarker: false,
+};
+
+const imageGeneratorLegacyImageHandle: OverlayNodeHandleSpec = {
+  id: "input-image",
+  type: "target",
+  position: Position.Left,
+  top: imageGeneratorInputTop,
+  className: "canvas-node-legacy-handle",
+  isConnectable: false,
+  showMarker: false,
 };
 
 function sourceHandle(id: string, className: string, title?: string): OverlayNodeHandleSpec {
@@ -102,11 +137,19 @@ function sourceHandle(id: string, className: string, title?: string): OverlayNod
   };
 }
 
-function imageGeneratorHandles(outputClassName: string): OverlayNodeHandleSpec[] {
+function imageGeneratorHandles(): OverlayNodeHandleSpec[] {
   return [
-    promptHandle,
-    imageHandle,
-    sourceHandle("output-image", outputClassName),
+    imageGeneratorUnifiedInputHandle,
+    imageGeneratorLegacyPromptHandle,
+    imageGeneratorLegacyImageHandle,
+    {
+      id: "output-image",
+      type: "source",
+      position: Position.Right,
+      top: imageGeneratorInputTop,
+      className: "canvas-node-minimal-handle canvas-node-minimal-handle-output",
+      title: "输出图片",
+    },
   ];
 }
 
@@ -119,6 +162,107 @@ function videoGeneratorHandles(outputClassName: string, imageLabel = "图片"): 
       labelClassName: imageLabel.length > 2 ? "-left-9" : "-left-6",
     },
     sourceHandle("output-video", outputClassName),
+  ];
+}
+
+const videoGeneratorUnifiedInputHandle: OverlayNodeHandleSpec = {
+  id: "input",
+  type: "target",
+  position: Position.Left,
+  top: videoGeneratorInputTop,
+  className: "canvas-node-minimal-handle canvas-node-minimal-handle-input",
+  title: "输入",
+};
+
+const videoGeneratorLegacyPromptHandle: OverlayNodeHandleSpec = {
+  id: "input-prompt",
+  type: "target",
+  position: Position.Left,
+  top: videoGeneratorInputTop,
+  className: "canvas-node-legacy-handle",
+  isConnectable: false,
+  showMarker: false,
+};
+
+const videoGeneratorLegacyImageHandle: OverlayNodeHandleSpec = {
+  id: "input-image",
+  type: "target",
+  position: Position.Left,
+  top: videoGeneratorInputTop,
+  className: "canvas-node-legacy-handle",
+  isConnectable: false,
+  showMarker: false,
+};
+
+function unifiedVideoGeneratorHandles(): OverlayNodeHandleSpec[] {
+  return [
+    videoGeneratorUnifiedInputHandle,
+    videoGeneratorLegacyPromptHandle,
+    videoGeneratorLegacyImageHandle,
+    {
+      id: "output-video",
+      type: "source",
+      position: Position.Right,
+      top: videoGeneratorInputTop,
+      className: "canvas-node-minimal-handle canvas-node-minimal-handle-output",
+      title: "输出视频",
+    },
+  ];
+}
+
+const llmContentUnifiedInputHandle: OverlayNodeHandleSpec = {
+  id: "input",
+  type: "target",
+  position: Position.Left,
+  top: llmContentInputTop,
+  className: "canvas-node-minimal-handle canvas-node-minimal-handle-input",
+  title: "输入",
+};
+
+const llmContentLegacyPromptHandle: OverlayNodeHandleSpec = {
+  id: "input-prompt",
+  type: "target",
+  position: Position.Left,
+  top: llmContentInputTop,
+  className: "canvas-node-legacy-handle",
+  isConnectable: false,
+  showMarker: false,
+};
+
+const llmContentLegacyImageHandle: OverlayNodeHandleSpec = {
+  id: "input-image",
+  type: "target",
+  position: Position.Left,
+  top: llmContentInputTop,
+  className: "canvas-node-legacy-handle",
+  isConnectable: false,
+  showMarker: false,
+};
+
+const llmContentLegacyFileHandle: OverlayNodeHandleSpec = {
+  id: "input-file",
+  type: "target",
+  position: Position.Left,
+  top: llmContentInputTop,
+  className: "canvas-node-legacy-handle",
+  isConnectable: false,
+  showMarker: false,
+};
+
+function unifiedLLMContentHandles(): OverlayNodeHandleSpec[] {
+  return [
+    llmContentUnifiedInputHandle,
+    llmContentLegacyPromptHandle,
+    llmContentLegacyImageHandle,
+    llmContentLegacyFileHandle,
+    {
+      id: "output-prompt",
+      type: "source",
+      position: Position.Right,
+      top: llmContentInputTop,
+      className: "canvas-node-minimal-handle canvas-node-minimal-handle-output",
+      title: "输出内容",
+    },
   ];
 }
 
@@ -143,14 +287,14 @@ export const overlayNodeDescriptors: Record<string, OverlayNodeDescriptor> = {
   },
   imageGeneratorNode: {
     type: "imageGeneratorNode",
-    size: { width: 240, height: 342 },
-    handles: imageGeneratorHandles("!bg-blue-500"),
+    size: { width: 360, height: 430 },
+    handles: imageGeneratorHandles(),
     render: nodeRenderer(ImageGeneratorNode),
   },
   videoGeneratorNode: {
     type: "videoGeneratorNode",
-    size: { width: 220, height: 228 },
-    handles: videoGeneratorHandles("!bg-blue-500", "首帧图"),
+    size: { width: 360, height: 430 },
+    handles: unifiedVideoGeneratorHandles(),
     render: nodeRenderer(VideoGeneratorNode),
   },
   veoGeneratorNode: {
@@ -167,29 +311,8 @@ export const overlayNodeDescriptors: Record<string, OverlayNodeDescriptor> = {
   },
   llmContentNode: {
     type: "llmContentNode",
-    size: { width: 280, height: 310 },
-    handles: [
-      {
-        ...promptHandle,
-        top: "25%",
-      },
-      {
-        ...imageHandle,
-        top: "50%",
-        label: "图片",
-        labelClassName: "-left-6",
-      },
-      {
-        id: "input-file",
-        type: "target",
-        position: Position.Left,
-        top: "75%",
-        className: "!w-3 !h-3 !bg-orange-500 !border-2 !border-white",
-        label: "文件",
-        labelClassName: "-left-6",
-      },
-      sourceHandle("output-prompt", "!bg-blue-500"),
-    ],
+    size: { width: 360, height: 430 },
+    handles: unifiedLLMContentHandles(),
     render: nodeRenderer(LLMContentNode),
   },
   pptContentNode: {

@@ -11,6 +11,8 @@ import {
 } from "lucide-react";
 import type { NodeCategory } from "@/types";
 import { getDefaultImageGeneratorData } from "@/components/nodes/imageGeneratorConfig";
+import { getDefaultVideoGeneratorData } from "@/components/nodes/videoGeneratorConfig";
+import { getDefaultLLMContentData } from "@/components/nodes/llmContentConfig";
 
 // 节点分类定义 - 统一配置
 export const nodeCategories: NodeCategory[] = [
@@ -53,7 +55,7 @@ export const nodeCategories: NodeCategory[] = [
       {
         type: "imageGeneratorNode",
         label: "绘图生成",
-        description: "统一绘图节点，在节点内选择 NanoBanana、GPT Image、DALL-E、Flux 等引擎",
+        description: "按接口规范选择 Gemini generateContent 或 OpenAI Images API，再选择模型",
         icon: "Sparkles",
         defaultData: getDefaultImageGeneratorData(),
         inputs: ["prompt", "image"],
@@ -68,50 +70,10 @@ export const nodeCategories: NodeCategory[] = [
     nodes: [
       {
         type: "videoGeneratorNode",
-        label: "视频生成 Sora",
-        description: "使用 Sora 模型生成视频",
+        label: "视频生成",
+        description: "按接口规范选择 OpenAI Videos API 或 new-api 通用视频 API，再选择模型",
         icon: "Video",
-        defaultData: {
-          label: "视频生成",
-          model: "sora-2",
-          seconds: "10",
-          size: "1280x720",
-          status: "idle",
-        },
-        inputs: ["prompt", "image"],
-        outputs: ["video"],
-      },
-      {
-        type: "veoGeneratorNode",
-        label: "Veo 视频生成",
-        description: "使用 Gemini Veo 模型生成视频",
-        icon: "Film",
-        defaultData: {
-          label: "Veo 视频",
-          model: "veo-3.1-fast-generate-preview",
-          aspectRatio: "16:9",
-          durationSeconds: 8,
-          generationMode: "text2video",
-          status: "idle",
-        },
-        inputs: ["prompt", "image"],
-        outputs: ["video"],
-      },
-      {
-        type: "klingGeneratorNode",
-        label: "Kling 视频生成",
-        description: "使用 Kling 模型生成视频",
-        icon: "Film",
-        defaultData: {
-          label: "Kling 视频",
-          model: "kling-v1",
-          mode: "text2video",
-          width: 1280,
-          height: 720,
-          duration: 5,
-          fps: 30,
-          status: "idle",
-        },
+        defaultData: getDefaultVideoGeneratorData(),
         inputs: ["prompt", "image"],
         outputs: ["video"],
       },
@@ -125,16 +87,9 @@ export const nodeCategories: NodeCategory[] = [
       {
         type: "llmContentNode",
         label: "LLM 内容生成",
-        description: "大语言模型文本生成",
+        description: "按接口规范选择 OpenAI、Gemini 或 Claude 内容协议，再选择模型",
         icon: "MessageSquareText",
-        defaultData: {
-          label: "LLM 内容生成",
-          model: "gemini-2.5-flash",
-          systemPrompt: "",
-          temperature: 0.7,
-          maxTokens: 8192,
-          status: "idle",
-        },
+        defaultData: getDefaultLLMContentData(),
         inputs: ["prompt", "image", "file"],
         outputs: ["prompt"],
       },

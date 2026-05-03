@@ -15,7 +15,6 @@ import { v4 as uuidv4 } from "uuid";
 import type { CustomNode, CustomEdge, CustomNodeData } from "@/types";
 import type { WorkflowExecutionContext } from "@/types/workflow";
 import type { PromptNodeTemplate } from "@/config/promptConfig";
-import type { ImageGeneratorEngine } from "@/components/nodes/imageGeneratorConfig";
 import { validateConnection } from "@/utils/connectionValidator";
 import { WorkflowEngine } from "@/services/workflowEngine";
 import { useCanvasStore } from "@/stores/canvasStore";
@@ -23,6 +22,11 @@ import { toast } from "@/stores/toastStore";
 import { readImage } from "@/services/fileStorageService";
 import { getDefaultImageGeneratorData } from "@/components/nodes/imageGeneratorConfig";
 import { compositeWithMask } from "@/utils/imageMask";
+import {
+  isFileInputEdge,
+  isImageInputEdge,
+  isPromptInputEdge,
+} from "@/utils/connectionHandles";
 
 const IMAGE_OUTPUT_NODE_TYPES = new Set(["imageGeneratorNode"]);
 
@@ -46,7 +50,7 @@ function createLightweightSnapshot(nodes: CustomNode[], edges: CustomEdge[]): Hi
     const { data } = node;
     // 检查是否有需要清除的大体积字段
     const hasHeavyData = 'imageData' in data || 'outputImage' in data
-      || 'maskImageData' in data || 'fileData' in data;
+      || 'maskImageData' in data || 'fileData' in data || 'videoData' in data;
     if (!hasHeavyData) return node;
 
     return {
@@ -57,6 +61,7 @@ function createLightweightSnapshot(nodes: CustomNode[], edges: CustomEdge[]): Hi
         outputImage: undefined,
         maskImageData: undefined,
         fileData: undefined,
+        videoData: undefined,
       },
     };
   }) as CustomNode[];
@@ -319,12 +324,12 @@ export const useFlowStore = create<FlowStore>((set, get) => ({
     // 3. 创建图片生成节点
     const generatorNodeId = uuidv4();
     nodeIds.push(generatorNodeId);
-    const generatorEngine: ImageGeneratorEngine = template.generatorType === "pro"
-      ? "nanobanana-pro"
-      : template.generatorType === "nb2"
-        ? "nanobanana2"
-        : "nanobanana";
-    const generatorData = getDefaultImageGeneratorData(generatorEngine);
+    const generatorData = getDefaultImageGeneratorData("gemini-generate-content");
+    const generatorModel = template.generatorType === "pro"
+      ? "gemini-3-pro-image-preview"
+      : template.generatorType === "fast"
+        ? "gemini-2.5-flash-image"
+        : "gemini-3.1-flash-image-preview";
 
     newNodes.push({
       id: generatorNodeId,
@@ -332,6 +337,7 @@ export const useFlowStore = create<FlowStore>((set, get) => ({
       position: { x: currentX, y: position.y + 50 },
       data: {
         ...generatorData,
+        model: generatorModel,
         aspectRatio: template.aspectRatio,
         imageSize: template.generatorType === "pro" ? "2K" : "1K", // NB2 和 Fast 默认 1K
       } as CustomNodeData,
@@ -344,7 +350,7 @@ export const useFlowStore = create<FlowStore>((set, get) => ({
       source: promptNodeId,
       target: generatorNodeId,
       sourceHandle: "output-prompt",
-      targetHandle: "input-prompt",
+      targetHandle: "input",
       type: "smoothstep",
       animated: true,
     });
@@ -357,7 +363,7 @@ export const useFlowStore = create<FlowStore>((set, get) => ({
         source: imageInputId,
         target: generatorNodeId,
         sourceHandle: "output-image",
-        targetHandle: "input-image",
+        targetHandle: "input",
         type: "smoothstep",
         animated: true,
       });
@@ -910,11 +916,9 @@ export const useFlowStore = create<FlowStore>((set, get) => ({
     for (const edge of incomingEdges) {
       const sourceNode = nodes.find((n) => n.id === edge.source);
       if (!sourceNode) continue;
+      const targetNode = nodes.find((n) => n.id === edge.target);
 
-      // 使用 targetHandle 来确定数据类型
-      const targetHandle = edge.targetHandle;
-
-      if (targetHandle === "input-prompt") {
+      if (isPromptInputEdge(edge, sourceNode, targetNode)) {
         // 从 prompt 输入端口连接的数据（支持多个，会自动拼接）
         if (sourceNode.type === "promptNode") {
           const data = sourceNode.data as { prompt?: string };
@@ -924,7 +928,7 @@ export const useFlowStore = create<FlowStore>((set, get) => ({
           const data = sourceNode.data as { outputContent?: string };
           if (data.outputContent) prompts.push(data.outputContent);
         }
-      } else if (targetHandle === "input-image") {
+      } else if (isImageInputEdge(edge, sourceNode, targetNode)) {
         // 从 image 输入端口连接的数据（支持多图）
         // 同时检查 imageData 和 imagePath，任一有值则表示有图片
         let hasImage = false;
@@ -943,7 +947,7 @@ export const useFlowStore = create<FlowStore>((set, get) => ({
           // 使用实际数据或占位值（同步版本可能没有 base64 数据）
           images.push(imageData || "");
         }
-      } else if (targetHandle === "input-file") {
+      } else if (isFileInputEdge(edge, sourceNode, targetNode)) {
         // 从 file 输入端口连接的数据（支持多文件）
         if (sourceNode.type === "fileUploadNode") {
           const data = sourceNode.data as { fileData?: string; mimeType?: string; fileName?: string };
@@ -1008,10 +1012,9 @@ export const useFlowStore = create<FlowStore>((set, get) => ({
     for (const edge of incomingEdges) {
       const sourceNode = nodes.find((n) => n.id === edge.source);
       if (!sourceNode) continue;
+      const targetNode = nodes.find((n) => n.id === edge.target);
 
-      const targetHandle = edge.targetHandle;
-
-      if (targetHandle === "input-prompt") {
+      if (isPromptInputEdge(edge, sourceNode, targetNode)) {
         // 从 prompt 输入端口连接的数据（支持多个，会自动拼接）
         if (sourceNode.type === "promptNode") {
           const data = sourceNode.data as { prompt?: string };
@@ -1020,7 +1023,7 @@ export const useFlowStore = create<FlowStore>((set, get) => ({
           const data = sourceNode.data as { outputContent?: string };
           if (data.outputContent) prompts.push(data.outputContent);
         }
-      } else if (targetHandle === "input-image") {
+      } else if (isImageInputEdge(edge, sourceNode, targetNode)) {
         // 从 image 输入端口连接的数据 - 按需从文件加载
         let imageData: string | undefined;
         if (sourceNode.type === "imageInputNode") {
@@ -1079,7 +1082,7 @@ export const useFlowStore = create<FlowStore>((set, get) => ({
             }
           }
         }
-      } else if (targetHandle === "input-file") {
+      } else if (isFileInputEdge(edge, sourceNode, targetNode)) {
         if (sourceNode.type === "fileUploadNode") {
           const data = sourceNode.data as { fileData?: string; mimeType?: string; fileName?: string };
           if (data.fileData && data.mimeType) {
@@ -1158,11 +1161,10 @@ export const useFlowStore = create<FlowStore>((set, get) => ({
     for (const edge of incomingEdges) {
       const sourceNode = nodes.find((n) => n.id === edge.source);
       if (!sourceNode) continue;
-
-      const targetHandle = edge.targetHandle;
+      const targetNode = nodes.find((n) => n.id === edge.target);
 
       // 只处理图片输入端口
-      if (targetHandle === "input-image" || !targetHandle) {
+      if (isImageInputEdge(edge, sourceNode, targetNode)) {
         if (sourceNode.type === "imageInputNode") {
           const data = sourceNode.data as { imageData?: string; fileName?: string; imagePath?: string; hasMask?: boolean };
           // 同时检查 imageData 和 imagePath，任一有值则表示有图片
@@ -1211,11 +1213,10 @@ export const useFlowStore = create<FlowStore>((set, get) => ({
     for (const edge of incomingEdges) {
       const sourceNode = nodes.find((n) => n.id === edge.source);
       if (!sourceNode) continue;
-
-      const targetHandle = edge.targetHandle;
+      const targetNode = nodes.find((n) => n.id === edge.target);
 
       // 只处理图片输入端口
-      if (targetHandle === "input-image" || !targetHandle) {
+      if (isImageInputEdge(edge, sourceNode, targetNode)) {
         if (sourceNode.type === "imageInputNode") {
           const data = sourceNode.data as {
             imageData?: string;
@@ -1302,10 +1303,10 @@ export const useFlowStore = create<FlowStore>((set, get) => ({
       const sourceNode = nodes.find((n) => n.id === edge.source);
       if (!sourceNode) continue;
 
-      const targetHandle = edge.targetHandle;
+      const targetNode = nodes.find((n) => n.id === edge.target);
 
       // 只处理文件输入端口
-      if (targetHandle === "input-file" || !targetHandle) {
+      if (isFileInputEdge(edge, sourceNode, targetNode)) {
         if (sourceNode.type === "fileUploadNode") {
           const data = sourceNode.data as { fileData?: string; fileName?: string; mimeType?: string };
           if (data.fileData) {
@@ -1335,11 +1336,10 @@ export const useFlowStore = create<FlowStore>((set, get) => ({
     for (const edge of incomingEdges) {
       const sourceNode = nodes.find((n) => n.id === edge.source);
       if (!sourceNode) continue;
-
-      const targetHandle = edge.targetHandle;
+      const targetNode = nodes.find((n) => n.id === edge.target);
 
       // 检测图片输入（同时检查 base64 数据和文件路径）
-      if (targetHandle === "input-image" || (!targetHandle && sourceNode.type === "imageInputNode")) {
+      if (isImageInputEdge(edge, sourceNode, targetNode)) {
         if (sourceNode.type === "imageInputNode") {
           const data = sourceNode.data as { imageData?: string; imagePath?: string; label?: string };
           // 同时检查 imageData 和 imagePath，任一有值则不为空
@@ -1362,7 +1362,7 @@ export const useFlowStore = create<FlowStore>((set, get) => ({
       }
 
       // 检测文件输入
-      if (targetHandle === "input-file" || (!targetHandle && sourceNode.type === "fileUploadNode")) {
+      if (isFileInputEdge(edge, sourceNode, targetNode)) {
         if (sourceNode.type === "fileUploadNode") {
           const data = sourceNode.data as { fileData?: string; label?: string };
           if (!data.fileData) {
@@ -1375,7 +1375,7 @@ export const useFlowStore = create<FlowStore>((set, get) => ({
       }
 
       // 检测提示词输入
-      if (targetHandle === "input-prompt" || (!targetHandle && sourceNode.type === "promptNode")) {
+      if (isPromptInputEdge(edge, sourceNode, targetNode)) {
         if (sourceNode.type === "promptNode") {
           const data = sourceNode.data as { prompt?: string; label?: string };
           if (!data.prompt || data.prompt.trim() === "") {

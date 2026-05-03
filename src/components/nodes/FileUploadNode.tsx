@@ -120,14 +120,16 @@ export const FileUploadNode = memo(({ id, data, selected }: NodeProps<FileUpload
   return (
     <div
       className={`
-        w-[220px] rounded-xl bg-base-100 shadow-lg border-2 transition-all
-        ${selected ? "border-primary shadow-primary/20" : "border-base-300"}
+        nc-node-card nc-node-accent-orange w-[220px] transition-all
+        ${selected ? "nc-node-card-selected" : ""}
       `}
     >
       {/* 节点头部 */}
-      <div className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-orange-500 to-amber-500 rounded-t-lg">
-        <FileUp className="w-4 h-4 text-white" />
-        <span className="text-sm font-medium text-white">{data.label}</span>
+      <div className="nc-node-header nc-node-header-accent justify-start gap-2">
+        <span className="nc-node-header-icon">
+          <FileUp className="w-4 h-4" />
+        </span>
+        <span className="text-sm font-semibold truncate">{data.label}</span>
       </div>
 
       {/* 节点内容 */}
@@ -143,7 +145,7 @@ export const FileUploadNode = memo(({ id, data, selected }: NodeProps<FileUpload
         {data.fileData ? (
           <div className="relative">
             {/* 文件信息展示 */}
-            <div className="bg-base-200 rounded-lg p-3 min-h-[100px] flex flex-col items-center justify-center gap-2">
+            <div className="nc-soft-surface rounded-lg p-3 min-h-[100px] flex flex-col items-center justify-center gap-2">
               <FileIcon className="w-10 h-10 text-base-content/60" />
               <div className="text-center w-full">
                 <p className="text-xs font-medium text-base-content truncate max-w-full px-2" title={data.fileName}>
@@ -173,7 +175,7 @@ export const FileUploadNode = memo(({ id, data, selected }: NodeProps<FileUpload
           </div>
         ) : (
           <button
-            className="btn btn-ghost w-full h-[100px] border-2 border-dashed border-base-300 hover:border-primary flex-col gap-1"
+            className="btn btn-ghost w-full h-[100px] border border-dashed border-base-300 hover:border-primary flex-col gap-1"
             onClick={() => fileInputRef.current?.click()}
             onPointerDown={(e) => e.stopPropagation()}
           >

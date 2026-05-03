@@ -26,6 +26,7 @@ pub struct LLMRequestParams {
     pub temperature: Option<f64>,
     pub max_tokens: Option<i32>,
     pub files: Option<Vec<FileData>>,
+    pub response_format: Option<String>,
     pub response_json_schema: Option<serde_json::Value>,
 }
 
@@ -145,7 +146,7 @@ enum OpenAIResponsesInputContent {
     #[serde(rename = "input_text")]
     InputText { text: String },
     #[serde(rename = "input_image")]
-    InputImage { image_url: OpenAIImageUrl },
+    InputImage { image_url: String },
 }
 
 #[derive(Debug, Serialize)]
@@ -175,7 +176,6 @@ struct OpenAIResponsesResponse {
 struct OpenAIResponsesOutputItem {
     #[serde(rename = "type")]
     item_type: String,
-    role: Option<String>,
     content: Option<Vec<OpenAIResponsesContent>>,
 }
 
@@ -200,23 +200,6 @@ fn is_openai_json_schema_supported(model: &str) -> bool {
     true
 }
 
-fn is_date_gte(date: &str, min: &str) -> bool {
-    let parse = |s: &str| -> Option<(i32, i32, i32)> {
-        let parts: Vec<&str> = s.split('-').collect();
-        if parts.len() != 3 {
-            return None;
-        }
-        let y = parts[0].parse::<i32>().ok()?;
-        let m = parts[1].parse::<i32>().ok()?;
-        let d = parts[2].parse::<i32>().ok()?;
-        Some((y, m, d))
-    };
-    match (parse(date), parse(min)) {
-        (Some(a), Some(b)) => a >= b,
-        _ => false,
-    }
-}
-
 fn select_openai_structured_output_mode(model: &str) -> OpenAIStructuredOutputMode {
     if is_openai_json_schema_supported(model) {
         OpenAIStructuredOutputMode::JsonSchema
@@ -235,7 +218,10 @@ fn schema_allows_null(schema: &serde_json::Value) -> bool {
                     _ => false,
                 }
             } else if let Some(any_of) = map.get("anyOf") {
-                any_of.as_array().map(|arr| arr.iter().any(schema_allows_null)).unwrap_or(false)
+                any_of
+                    .as_array()
+                    .map(|arr| arr.iter().any(schema_allows_null))
+                    .unwrap_or(false)
             } else {
                 false
             }
@@ -282,11 +268,12 @@ fn normalize_schema_for_openai(schema: &serde_json::Value) -> serde_json::Value 
 
             if let Some(any_of) = map.get("anyOf") {
                 if let Some(arr) = any_of.as_array() {
-                    let normalized_any_of: Vec<serde_json::Value> = arr
-                        .iter()
-                        .map(normalize_schema_for_openai)
-                        .collect();
-                    new_map.insert("anyOf".to_string(), serde_json::Value::Array(normalized_any_of));
+                    let normalized_any_of: Vec<serde_json::Value> =
+                        arr.iter().map(normalize_schema_for_openai).collect();
+                    new_map.insert(
+                        "anyOf".to_string(),
+                        serde_json::Value::Array(normalized_any_of),
+                    );
                 }
             }
 
@@ -307,10 +294,15 @@ fn normalize_schema_for_openai(schema: &serde_json::Value) -> serde_json::Value 
                 for (name, def_schema) in defs.iter() {
                     new_defs.insert(name.clone(), normalize_schema_for_openai(def_schema));
                 }
-                new_map.insert("definitions".to_string(), serde_json::Value::Object(new_defs));
+                new_map.insert(
+                    "definitions".to_string(),
+                    serde_json::Value::Object(new_defs),
+                );
             }
 
-            if map.get("type").and_then(|v| v.as_str()) == Some("object") || map.contains_key("properties") {
+            if map.get("type").and_then(|v| v.as_str()) == Some("object")
+                || map.contains_key("properties")
+            {
                 if let Some(props) = map.get("properties").and_then(|v| v.as_object()) {
                     let required: Vec<String> = map
                         .get("required")
@@ -321,7 +313,8 @@ fn normalize_schema_for_openai(schema: &serde_json::Value) -> serde_json::Value 
                                 .collect()
                         })
                         .unwrap_or_default();
-                    let required_set: std::collections::HashSet<String> = required.into_iter().collect();
+                    let required_set: std::collections::HashSet<String> =
+                        required.into_iter().collect();
 
                     let mut new_props = serde_json::Map::new();
                     for (name, prop_schema) in props.iter() {
@@ -339,10 +332,22 @@ fn normalize_schema_for_openai(schema: &serde_json::Value) -> serde_json::Value 
                         .map(|k| serde_json::Value::String(k.clone()))
                         .collect();
 
-                    new_map.insert("properties".to_string(), serde_json::Value::Object(new_props));
-                    new_map.insert("required".to_string(), serde_json::Value::Array(required_all));
-                    new_map.insert("additionalProperties".to_string(), serde_json::Value::Bool(false));
-                    new_map.insert("type".to_string(), serde_json::Value::String("object".to_string()));
+                    new_map.insert(
+                        "properties".to_string(),
+                        serde_json::Value::Object(new_props),
+                    );
+                    new_map.insert(
+                        "required".to_string(),
+                        serde_json::Value::Array(required_all),
+                    );
+                    new_map.insert(
+                        "additionalProperties".to_string(),
+                        serde_json::Value::Bool(false),
+                    );
+                    new_map.insert(
+                        "type".to_string(),
+                        serde_json::Value::String("object".to_string()),
+                    );
                 }
             }
 
@@ -439,9 +444,9 @@ pub async fn openai_chat_completion(params: LLMRequestParams) -> LLMResult {
     let user_content = if let Some(files) = &params.files {
         if !files.is_empty() {
             // 多模态消息
-            let mut parts: Vec<OpenAIContentPart> = vec![
-                OpenAIContentPart::Text { text: params.prompt.clone() }
-            ];
+            let mut parts: Vec<OpenAIContentPart> = vec![OpenAIContentPart::Text {
+                text: params.prompt.clone(),
+            }];
             for file in files {
                 if file.mime_type.starts_with("image/") {
                     parts.push(OpenAIContentPart::ImageUrl {
@@ -465,28 +470,41 @@ pub async fn openai_chat_completion(params: LLMRequestParams) -> LLMResult {
     });
 
     // 构建响应格式（根据模型决定使用 json_schema 或 json_object）
-    let response_format = params.response_json_schema.as_ref().map(|schema| {
-        match select_openai_structured_output_mode(&params.model) {
-            OpenAIStructuredOutputMode::JsonSchema => {
-                println!("[Rust] OpenAI response_format: json_schema (strict)");
-                OpenAIResponseFormat {
-                    format_type: "json_schema".to_string(),
-                    json_schema: Some(OpenAIJsonSchema {
-                        name: "response".to_string(),
-                        schema: normalize_schema_for_openai(schema),
-                        strict: true,
-                    }),
+    let response_format = if params.response_format.as_deref() == Some("json_object")
+        && params.response_json_schema.is_none()
+    {
+        Some(OpenAIResponseFormat {
+            format_type: "json_object".to_string(),
+            json_schema: None,
+        })
+    } else {
+        params.response_json_schema.as_ref().map(
+            |schema| match if params.response_format.as_deref() == Some("json_object") {
+                OpenAIStructuredOutputMode::JsonObject
+            } else {
+                select_openai_structured_output_mode(&params.model)
+            } {
+                OpenAIStructuredOutputMode::JsonSchema => {
+                    println!("[Rust] OpenAI response_format: json_schema (strict)");
+                    OpenAIResponseFormat {
+                        format_type: "json_schema".to_string(),
+                        json_schema: Some(OpenAIJsonSchema {
+                            name: "response".to_string(),
+                            schema: normalize_schema_for_openai(schema),
+                            strict: true,
+                        }),
+                    }
                 }
-            }
-            OpenAIStructuredOutputMode::JsonObject => {
-                println!("[Rust] OpenAI response_format: json_object");
-                OpenAIResponseFormat {
-                    format_type: "json_object".to_string(),
-                    json_schema: None,
+                OpenAIStructuredOutputMode::JsonObject => {
+                    println!("[Rust] OpenAI response_format: json_object");
+                    OpenAIResponseFormat {
+                        format_type: "json_object".to_string(),
+                        json_schema: None,
+                    }
                 }
-            }
-        }
-    });
+            },
+        )
+    };
 
     // 构建请求体
     let request_body = OpenAIRequest {
@@ -505,10 +523,7 @@ pub async fn openai_chat_completion(params: LLMRequestParams) -> LLMResult {
     println!("[Rust] Request URL: {}", url);
 
     // 创建 HTTP 客户端
-    let client = match Client::builder()
-        .timeout(Duration::from_secs(300))
-        .build()
-    {
+    let client = match Client::builder().timeout(Duration::from_secs(300)).build() {
         Ok(c) => c,
         Err(e) => {
             return LLMResult {
@@ -534,7 +549,7 @@ pub async fn openai_chat_completion(params: LLMRequestParams) -> LLMResult {
         Ok(r) => {
             println!("[Rust] Response received in {:?}", start_time.elapsed());
             r
-        },
+        }
         Err(e) => {
             println!("[Rust] Request failed: {}", e);
             let error_msg = if e.is_timeout() {
@@ -612,7 +627,10 @@ pub async fn openai_chat_completion(params: LLMRequestParams) -> LLMResult {
         };
     }
 
-    println!("[Rust] OpenAI result: content length = {}", content.as_ref().map(|c| c.len()).unwrap_or(0));
+    println!(
+        "[Rust] OpenAI result: content length = {}",
+        content.as_ref().map(|c| c.len()).unwrap_or(0)
+    );
 
     LLMResult {
         success: true,
@@ -630,17 +648,16 @@ pub async fn openai_responses(params: LLMRequestParams) -> LLMResult {
     println!("[Rust] model: {}", params.model);
 
     // 构建输入内容
-    let mut content: Vec<OpenAIResponsesInputContent> = vec![
-        OpenAIResponsesInputContent::InputText { text: params.prompt.clone() }
-    ];
+    let mut content: Vec<OpenAIResponsesInputContent> =
+        vec![OpenAIResponsesInputContent::InputText {
+            text: params.prompt.clone(),
+        }];
 
     if let Some(files) = &params.files {
         for file in files {
             if file.mime_type.starts_with("image/") {
                 content.push(OpenAIResponsesInputContent::InputImage {
-                    image_url: OpenAIImageUrl {
-                        url: format!("data:{};base64,{}", file.mime_type, file.data),
-                    },
+                    image_url: format!("data:{};base64,{}", file.mime_type, file.data),
                 });
             }
         }
@@ -653,32 +670,49 @@ pub async fn openai_responses(params: LLMRequestParams) -> LLMResult {
     }];
 
     // 构建 text.format（结构化输出）
-    let text = params.response_json_schema.as_ref().map(|schema| {
-        match select_openai_structured_output_mode(&params.model) {
-            OpenAIStructuredOutputMode::JsonSchema => {
-                println!("[Rust] OpenAI Responses text.format: json_schema (strict)");
-                OpenAIResponsesText {
-                    format: OpenAIResponsesTextFormat {
-                        format_type: "json_schema".to_string(),
-                        name: Some("response".to_string()),
-                        schema: Some(normalize_schema_for_openai(schema)),
-                        strict: Some(true),
-                    },
+    let text = if params.response_format.as_deref() == Some("json_object")
+        && params.response_json_schema.is_none()
+    {
+        Some(OpenAIResponsesText {
+            format: OpenAIResponsesTextFormat {
+                format_type: "json_object".to_string(),
+                name: None,
+                schema: None,
+                strict: None,
+            },
+        })
+    } else {
+        params.response_json_schema.as_ref().map(
+            |schema| match if params.response_format.as_deref() == Some("json_object") {
+                OpenAIStructuredOutputMode::JsonObject
+            } else {
+                select_openai_structured_output_mode(&params.model)
+            } {
+                OpenAIStructuredOutputMode::JsonSchema => {
+                    println!("[Rust] OpenAI Responses text.format: json_schema (strict)");
+                    OpenAIResponsesText {
+                        format: OpenAIResponsesTextFormat {
+                            format_type: "json_schema".to_string(),
+                            name: Some("response".to_string()),
+                            schema: Some(normalize_schema_for_openai(schema)),
+                            strict: Some(true),
+                        },
+                    }
                 }
-            }
-            OpenAIStructuredOutputMode::JsonObject => {
-                println!("[Rust] OpenAI Responses text.format: json_object");
-                OpenAIResponsesText {
-                    format: OpenAIResponsesTextFormat {
-                        format_type: "json_object".to_string(),
-                        name: None,
-                        schema: None,
-                        strict: None,
-                    },
+                OpenAIStructuredOutputMode::JsonObject => {
+                    println!("[Rust] OpenAI Responses text.format: json_object");
+                    OpenAIResponsesText {
+                        format: OpenAIResponsesTextFormat {
+                            format_type: "json_object".to_string(),
+                            name: None,
+                            schema: None,
+                            strict: None,
+                        },
+                    }
                 }
-            }
-        }
-    });
+            },
+        )
+    };
 
     // 构建请求体
     let request_body = OpenAIResponsesRequest {
@@ -691,17 +725,11 @@ pub async fn openai_responses(params: LLMRequestParams) -> LLMResult {
     };
 
     // 构建 URL
-    let url = format!(
-        "{}/v1/responses",
-        params.base_url.trim_end_matches('/')
-    );
+    let url = format!("{}/v1/responses", params.base_url.trim_end_matches('/'));
     println!("[Rust] Request URL: {}", url);
 
     // 创建 HTTP 客户端
-    let client = match Client::builder()
-        .timeout(Duration::from_secs(300))
-        .build()
-    {
+    let client = match Client::builder().timeout(Duration::from_secs(300)).build() {
         Ok(c) => c,
         Err(e) => {
             return LLMResult {
@@ -727,7 +755,7 @@ pub async fn openai_responses(params: LLMRequestParams) -> LLMResult {
         Ok(r) => {
             println!("[Rust] Response received in {:?}", start_time.elapsed());
             r
-        },
+        }
         Err(e) => {
             println!("[Rust] Request failed: {}", e);
             let error_msg = if e.is_timeout() {
@@ -836,7 +864,10 @@ pub async fn openai_responses(params: LLMRequestParams) -> LLMResult {
         };
     }
 
-    println!("[Rust] OpenAI Responses result: content length = {}", content.as_ref().map(|c| c.len()).unwrap_or(0));
+    println!(
+        "[Rust] OpenAI Responses result: content length = {}",
+        content.as_ref().map(|c| c.len()).unwrap_or(0)
+    );
 
     LLMResult {
         success: true,
@@ -869,7 +900,9 @@ pub async fn claude_chat_completion(params: LLMRequestParams) -> LLMResult {
                     });
                 }
             }
-            parts.push(ClaudeContentPart::Text { text: params.prompt.clone() });
+            parts.push(ClaudeContentPart::Text {
+                text: params.prompt.clone(),
+            });
             ClaudeContent::Parts(parts)
         } else {
             ClaudeContent::Text(params.prompt.clone())
@@ -893,17 +926,11 @@ pub async fn claude_chat_completion(params: LLMRequestParams) -> LLMResult {
     };
 
     // 构建 URL
-    let url = format!(
-        "{}/v1/messages",
-        params.base_url.trim_end_matches('/')
-    );
+    let url = format!("{}/v1/messages", params.base_url.trim_end_matches('/'));
     println!("[Rust] Request URL: {}", url);
 
     // 创建 HTTP 客户端
-    let client = match Client::builder()
-        .timeout(Duration::from_secs(300))
-        .build()
-    {
+    let client = match Client::builder().timeout(Duration::from_secs(300)).build() {
         Ok(c) => c,
         Err(e) => {
             return LLMResult {
@@ -930,7 +957,7 @@ pub async fn claude_chat_completion(params: LLMRequestParams) -> LLMResult {
         Ok(r) => {
             println!("[Rust] Response received in {:?}", start_time.elapsed());
             r
-        },
+        }
         Err(e) => {
             println!("[Rust] Request failed: {}", e);
             let error_msg = if e.is_timeout() {
@@ -1007,7 +1034,10 @@ pub async fn claude_chat_completion(params: LLMRequestParams) -> LLMResult {
         };
     }
 
-    println!("[Rust] Claude result: content length = {}", content.as_ref().map(|c| c.len()).unwrap_or(0));
+    println!(
+        "[Rust] Claude result: content length = {}",
+        content.as_ref().map(|c| c.len()).unwrap_or(0)
+    );
 
     LLMResult {
         success: true,

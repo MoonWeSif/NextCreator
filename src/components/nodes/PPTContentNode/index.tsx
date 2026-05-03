@@ -332,8 +332,8 @@ export const PPTContentNode = memo(({ id, data, selected }: NodeProps<PPTContent
     <>
       <div
         className={`
-          w-[360px] rounded-xl bg-base-100 shadow-lg border-2 transition-all duration-200
-          ${selected ? "border-primary shadow-primary/20" : "border-base-300"}
+          nc-node-card nc-node-accent-indigo w-[360px] transition-all duration-200
+          ${selected ? "nc-node-card-selected" : ""}
         `}
       >
         {!isOverlay && (
@@ -382,17 +382,19 @@ export const PPTContentNode = memo(({ id, data, selected }: NodeProps<PPTContent
         )}
 
         {/* 节点头部 */}
-        <div className="flex items-center justify-between px-3 py-2 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-t-lg">
+        <div className="nc-node-header nc-node-header-accent">
           <div className="flex items-center gap-2">
-            <FileText className="w-4 h-4 text-white" />
-            <span className="text-sm font-medium text-white">{data.label}</span>
+            <span className="nc-node-header-icon">
+              <FileText className="w-4 h-4" />
+            </span>
+            <span className="text-sm font-semibold truncate">{data.label}</span>
           </div>
           <div className="flex items-center gap-1">
-            <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded text-white">
+            <span className="nc-badge">
               PPT
             </span>
             <button
-              className="btn btn-ghost btn-xs p-1 text-white/70 hover:text-white hover:bg-white/10"
+              className="btn btn-ghost btn-xs p-1"
               onClick={openDetailPanel}
               title="展开详情"
             >

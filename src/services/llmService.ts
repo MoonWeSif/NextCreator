@@ -1,18 +1,21 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { LLMModelType, Provider, ErrorDetails } from "@/types";
 import { useSettingsStore } from "@/stores/settingsStore";
+import type { LLMApiProtocol } from "@/components/nodes/llmContentConfig";
 
 // LLM 节点类型
 type LLMNodeType = "llm" | "llmContent";
 
 // LLM 生成参数
 export interface LLMGenerationParams {
+  apiProtocol?: LLMApiProtocol;
   prompt: string;
   model: LLMModelType;
   systemPrompt?: string;
   temperature?: number;
   maxTokens?: number;
   files?: Array<{ data: string; mimeType: string; fileName?: string }>; // 文件数据（base64）
+  responseFormat?: "text" | "json_object" | "json_schema";
   responseJsonSchema?: Record<string, unknown>; // 结构化输出的 JSON Schema
 }
 
@@ -33,6 +36,7 @@ interface TauriLLMParams {
   temperature?: number;
   maxTokens?: number;
   files?: Array<{ data: string; mimeType: string; fileName?: string }>; // 文件数据（base64）
+  responseFormat?: "text" | "json_object" | "json_schema";
   responseJsonSchema?: Record<string, unknown>; // 结构化输出的 JSON Schema
 }
 
@@ -64,7 +68,7 @@ function getProviderConfig(nodeType: LLMNodeType) {
   return provider;
 }
 
-// 根据协议获取对应的 Tauri 命令名称
+// 根据供应商协议获取对应的 Tauri 命令名称
 function getCommandByProtocol(protocol: string): string {
   switch (protocol) {
     case "google":
@@ -77,6 +81,36 @@ function getCommandByProtocol(protocol: string): string {
       return "claude_chat_completion";
     default:
       return "gemini_generate_text";
+  }
+}
+
+function getCommandByLLMApiProtocol(apiProtocol?: LLMApiProtocol): string | undefined {
+  switch (apiProtocol) {
+    case "gemini-generate-content":
+      return "gemini_generate_text";
+    case "openai-chat-completions":
+      return "openai_chat_completion";
+    case "openai-responses":
+      return "openai_responses";
+    case "claude-messages":
+      return "claude_chat_completion";
+    default:
+      return undefined;
+  }
+}
+
+function getProviderProtocolByLLMApiProtocol(apiProtocol?: LLMApiProtocol): string | undefined {
+  switch (apiProtocol) {
+    case "gemini-generate-content":
+      return "google";
+    case "openai-chat-completions":
+      return "openai";
+    case "openai-responses":
+      return "openaiResponses";
+    case "claude-messages":
+      return "claude";
+    default:
+      return undefined;
   }
 }
 
@@ -115,9 +149,9 @@ function buildErrorDetails(
 }
 
 // 通过 Tauri 后端代理发送 LLM 请求
-async function invokeLLMByProtocol(params: TauriLLMParams, provider: Provider): Promise<LLMResponse> {
-  const protocol = provider.protocol || "google";
-  const command = getCommandByProtocol(protocol);
+async function invokeLLMByProtocol(params: TauriLLMParams, provider: Provider, apiProtocol?: LLMApiProtocol): Promise<LLMResponse> {
+  const protocol = getProviderProtocolByLLMApiProtocol(apiProtocol) || provider.protocol || "google";
+  const command = getCommandByLLMApiProtocol(apiProtocol) || getCommandByProtocol(protocol);
 
   console.log(`[llmService] invokeLLMByProtocol called, protocol: ${protocol}, command: ${command}`);
 
@@ -141,6 +175,7 @@ async function invokeLLMByProtocol(params: TauriLLMParams, provider: Provider): 
     temperature: params.temperature,
     maxTokens: params.maxTokens,
     filesCount: params.files?.length || 0,
+    responseFormat: params.responseFormat,
     hasJsonSchema: !!params.responseJsonSchema,
   };
 
@@ -196,10 +231,11 @@ export async function generateText(params: LLMGenerationParams): Promise<LLMResp
       temperature: params.temperature,
       maxTokens: params.maxTokens,
       files: params.files,
+      responseFormat: params.responseFormat,
       responseJsonSchema: params.responseJsonSchema,
     };
 
-    return await invokeLLMByProtocol(requestParams, provider);
+    return await invokeLLMByProtocol(requestParams, provider, params.apiProtocol);
   } catch (error) {
     const message = error instanceof Error ? error.message : "生成失败";
     return {
@@ -226,10 +262,11 @@ export async function generateLLMContent(params: LLMGenerationParams): Promise<L
       temperature: params.temperature,
       maxTokens: params.maxTokens,
       files: params.files,
+      responseFormat: params.responseFormat,
       responseJsonSchema: params.responseJsonSchema,
     };
 
-    return await invokeLLMByProtocol(requestParams, provider);
+    return await invokeLLMByProtocol(requestParams, provider, params.apiProtocol);
   } catch (error) {
     const message = error instanceof Error ? error.message : "生成失败";
     return {

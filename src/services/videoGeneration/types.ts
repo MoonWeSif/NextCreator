@@ -3,6 +3,7 @@
  */
 
 import type { ProviderProtocol, ErrorDetails } from "@/types";
+import type { VideoApiProtocol } from "@/components/nodes/videoGeneratorConfig";
 
 /**
  * 视频生成能力枚举
@@ -19,22 +20,43 @@ export type VideoTaskStage = "queued" | "in_progress" | "completed" | "failed";
 /**
  * 视频尺寸类型
  */
-export type VideoSizeType = "1280x720" | "720x1280" | "1792x1024" | "1024x1792";
+export type VideoSizeType = string;
 
 /**
  * 视频时长类型
  */
-export type VideoDurationType = "10" | "15" | "25";
+export type VideoDurationType = string;
 
 /**
  * 视频生成请求参数（通用）
  */
 export interface VideoGenerationRequest {
+  apiProtocol?: VideoApiProtocol;
   prompt: string;
   model: string;
   inputImage?: string; // base64 首帧参考图
   seconds?: VideoDurationType; // 视频时长
   size?: VideoSizeType; // 视频尺寸
+  duration?: number;
+  width?: number;
+  height?: number;
+  fps?: number;
+  seed?: number;
+  n?: number;
+  responseFormat?: string;
+  user?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface VideoTaskStatusSnapshot {
+  taskId?: string;
+  status?: VideoTaskStage;
+  progress?: number;
+  videoUrl?: string;
+  videoData?: string;
+  format?: string;
+  metadata?: Record<string, unknown>;
+  raw?: Record<string, unknown>;
 }
 
 /**
@@ -44,6 +66,11 @@ export interface VideoTaskResponse {
   taskId?: string;
   status?: VideoTaskStage;
   progress?: number;
+  videoUrl?: string;
+  videoData?: string;
+  format?: string;
+  metadata?: Record<string, unknown>;
+  raw?: Record<string, unknown>;
   error?: string;
   errorDetails?: ErrorDetails;
 }
@@ -56,7 +83,10 @@ export interface VideoGenerationResponse {
   status?: VideoTaskStage;
   progress?: number;
   videoData?: string; // base64 视频数据
-  videoUrl?: string; // Blob URL
+  videoUrl?: string; // 远端 URL 或 Blob URL
+  format?: string;
+  metadata?: Record<string, unknown>;
+  statusSnapshot?: VideoTaskStatusSnapshot;
   error?: string;
   errorDetails?: ErrorDetails;
 }
@@ -128,7 +158,7 @@ export interface VideoGenerationProvider {
   getVideoContent(
     taskId: string,
     config: VideoProviderConfig
-  ): Promise<{ videoData?: string; error?: string }>;
+  ): Promise<{ videoData?: string; videoUrl?: string; error?: string }>;
 
   /**
    * 验证请求参数
@@ -150,4 +180,4 @@ export interface VideoGenerationProvider {
 /**
  * 视频节点类型
  */
-export type VideoNodeType = "videoGenerator" | "veoGenerator";
+export type VideoNodeType = "videoGenerator" | "newApiVideoGenerator" | "veoGenerator";

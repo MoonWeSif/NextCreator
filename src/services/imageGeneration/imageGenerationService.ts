@@ -16,6 +16,7 @@ import type {
   ProviderConfig,
   ImageNodeType,
 } from "./types";
+import type { ImageApiProtocol } from "@/components/nodes/imageGeneratorConfig";
 
 /**
  * 初始化注册所有提供商
@@ -67,6 +68,25 @@ function getProviderConfig(nodeType: ImageNodeType): ProviderConfig {
   };
 }
 
+function getProviderKeyForImageProtocol(protocol?: ImageApiProtocol): ImageNodeType | undefined {
+  if (protocol === "gemini-generate-content") return "imageGeneratorNB2";
+  if (protocol === "openai-images") return "gptImageGenerator";
+  return undefined;
+}
+
+function getProviderConfigForRequest(
+  nodeType: ImageNodeType,
+  request: ImageGenerationRequest
+): { nodeType: ImageNodeType; config: ProviderConfig } {
+  const protocolNodeType = getProviderKeyForImageProtocol(request.apiProtocol);
+  const resolvedNodeType = protocolNodeType || nodeType;
+
+  return {
+    nodeType: resolvedNodeType,
+    config: getProviderConfig(resolvedNodeType),
+  };
+}
+
 /**
  * 根据节点类型选择具体实现。同一个 openai 协议下存在 DALL-E、Flux、GPT Image
  * 等多种 Images API 兼容形态，不能只按协议取第一个 provider。
@@ -99,10 +119,10 @@ export async function generateImage(
   abortSignal?: AbortSignal
 ): Promise<ImageGenerationResponse> {
   try {
-    const config = getProviderConfig(nodeType);
+    const { nodeType: providerNodeType, config } = getProviderConfigForRequest(nodeType, request);
 
     // 根据节点类型和协议获取对应的提供商实现
-    const provider = getProviderForNodeType(nodeType, config);
+    const provider = getProviderForNodeType(providerNodeType, config);
 
     if (!provider) {
       return {
@@ -111,7 +131,7 @@ export async function generateImage(
     }
 
     console.log(
-      `[ImageGenService] Using provider: ${provider.id} for ${nodeType}`
+      `[ImageGenService] Using provider: ${provider.id} for ${providerNodeType}`
     );
 
     return await provider.generate(request, config, abortSignal);

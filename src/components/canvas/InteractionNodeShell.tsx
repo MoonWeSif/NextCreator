@@ -30,6 +30,7 @@ function InteractionNodeShellBase({ type }: NodeProps<InteractionNode>) {
           className={handle.className}
           style={{ top: handle.top }}
           title={handle.title}
+          isConnectable={handle.isConnectable}
         />
       ))}
     </div>

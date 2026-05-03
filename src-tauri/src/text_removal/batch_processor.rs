@@ -1,9 +1,9 @@
 // 批量处理服务
 // 并发 Gemini 检测 + 自适应背景修复
 
+use super::adaptive_inpainter::adaptive_inpaint;
 use super::gemini_detector::{detect_text, extract_text_styles, GeminiConfig, TextRegion};
 use super::service::{build_text_boxes, TextBoxData};
-use super::adaptive_inpainter::adaptive_inpaint;
 
 use base64::{engine::general_purpose::STANDARD, Engine};
 use image::{DynamicImage, ImageFormat, RgbImage};
@@ -244,13 +244,16 @@ pub async fn process_pages_batch(app: AppHandle, params: BatchProcessParams) -> 
                         return;
                     }
 
-                    let styles = match extract_text_styles(&page.image_data, &result.regions, &gemini_cfg).await {
-                        Ok(s) => s,
-                        Err(e) => {
-                            println!("[Rust] 样式提取失败，使用默认样式: {}", e);
-                            vec![]
-                        }
-                    };
+                    let styles =
+                        match extract_text_styles(&page.image_data, &result.regions, &gemini_cfg)
+                            .await
+                        {
+                            Ok(s) => s,
+                            Err(e) => {
+                                println!("[Rust] 样式提取失败，使用默认样式: {}", e);
+                                vec![]
+                            }
+                        };
 
                     let text_boxes = build_text_boxes(
                         &result.regions,
@@ -365,10 +368,7 @@ pub async fn process_pages_batch(app: AppHandle, params: BatchProcessParams) -> 
 
     BatchProcessResult {
         success: true,
-        message: format!(
-            "处理完成: {} 成功, {} 失败",
-            total_success, total_errors
-        ),
+        message: format!("处理完成: {} 成功, {} 失败", total_success, total_errors),
     }
 }
 
@@ -386,17 +386,12 @@ pub async fn stop_batch_processing() -> BatchProcessResult {
 // ==================== 辅助函数 ====================
 
 /// 执行单页修复
-async fn process_inpaint(
-    rgb_image: RgbImage,
-    regions: &[TextRegion],
-) -> Result<String, String> {
+async fn process_inpaint(rgb_image: RgbImage, regions: &[TextRegion]) -> Result<String, String> {
     let regions_vec = regions.to_vec();
-    let inpainted = tokio::task::spawn_blocking(move || {
-        adaptive_inpaint(&rgb_image, &regions_vec)
-    })
-    .await
-    .map_err(|e| format!("背景修复任务失败: {}", e))?
-    .map_err(|e| format!("背景修复失败: {}", e))?;
+    let inpainted = tokio::task::spawn_blocking(move || adaptive_inpaint(&rgb_image, &regions_vec))
+        .await
+        .map_err(|e| format!("背景修复任务失败: {}", e))?
+        .map_err(|e| format!("背景修复失败: {}", e))?;
 
     // 编码结果
     let mut output_buffer = Cursor::new(Vec::new());

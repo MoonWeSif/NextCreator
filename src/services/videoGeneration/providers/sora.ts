@@ -13,6 +13,7 @@ import type {
   VideoGenerationCapability,
   VideoSizeType,
   VideoDurationType,
+  VideoTaskStage,
 } from "../types";
 import type { ErrorDetails } from "@/types";
 
@@ -39,6 +40,10 @@ interface TauriVideoTaskResult {
   taskId?: string;
   status?: string;
   progress?: number;
+  videoUrl?: string;
+  format?: string;
+  metadata?: Record<string, unknown>;
+  raw?: Record<string, unknown>;
   error?: string;
 }
 
@@ -66,9 +71,11 @@ export class SoraVideoProvider implements VideoGenerationProvider {
     "720x1280",
     "1792x1024",
     "1024x1792",
+    "1920x1080",
+    "1080x1920",
   ];
 
-  readonly supportedDurations: VideoDurationType[] = ["10", "15", "25"];
+  readonly supportedDurations: VideoDurationType[] = ["4", "8", "12", "16", "20"];
 
   readonly supportsInputImage = true;
 
@@ -83,7 +90,11 @@ export class SoraVideoProvider implements VideoGenerationProvider {
       return { valid: false, error: "提示词不能为空" };
     }
 
-    if (request.size && !this.supportedSizes.includes(request.size)) {
+    const supportedSizes = request.model === "sora-2-pro"
+      ? this.supportedSizes
+      : ["1280x720", "720x1280"];
+
+    if (request.size && !supportedSizes.includes(request.size)) {
       return { valid: false, error: `不支持的视频尺寸: ${request.size}` };
     }
 
@@ -133,7 +144,7 @@ export class SoraVideoProvider implements VideoGenerationProvider {
 
     try {
       const params = this.buildTauriParams(request, config);
-      const fullRequestUrl = `${config.baseUrl}/v1/video/generations`;
+      const fullRequestUrl = `${config.baseUrl}/v1/videos`;
 
       console.log("[SoraProvider] Creating video task via Tauri backend...");
 
@@ -176,8 +187,12 @@ export class SoraVideoProvider implements VideoGenerationProvider {
 
       return {
         taskId: result.taskId,
-        status: result.status as VideoTaskResponse["status"],
+        status: this.normalizeStatus(result.status),
         progress: result.progress,
+        videoUrl: result.videoUrl,
+        format: result.format,
+        metadata: result.metadata,
+        raw: result.raw,
       };
     } catch (error) {
       const message =
@@ -187,7 +202,7 @@ export class SoraVideoProvider implements VideoGenerationProvider {
         errorDetails: this.buildErrorDetails(error, {
           model: request.model,
           provider: config.name,
-          requestUrl: `${config.baseUrl}/v1/video/generations`,
+          requestUrl: `${config.baseUrl}/v1/videos`,
           requestBody: {
             model: request.model,
             prompt: request.prompt.slice(0, 500),
@@ -223,8 +238,12 @@ export class SoraVideoProvider implements VideoGenerationProvider {
 
       return {
         taskId: result.taskId,
-        status: result.status as VideoTaskResponse["status"],
+        status: this.normalizeStatus(result.status),
         progress: result.progress,
+        videoUrl: result.videoUrl,
+        format: result.format,
+        metadata: result.metadata,
+        raw: result.raw,
         error: result.error,
       };
     } catch (error) {
@@ -316,6 +335,14 @@ export class SoraVideoProvider implements VideoGenerationProvider {
     }
 
     return details;
+  }
+
+  private normalizeStatus(status?: string): VideoTaskStage | undefined {
+    if (status === "completed") return "completed";
+    if (status === "failed" || status === "failure" || status === "cancelled" || status === "expired") return "failed";
+    if (status === "in_progress" || status === "processing" || status === "running") return "in_progress";
+    if (status === "queued" || status === "pending") return "queued";
+    return status as VideoTaskStage | undefined;
   }
 }
 

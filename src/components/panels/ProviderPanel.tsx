@@ -39,15 +39,16 @@ const protocolLabels: Record<ProviderProtocol, string> = {
 
 // 节点类型配置
 const nodeTypeConfig: { key: keyof NodeProviderMapping; label: string; description: string }[] = [
-  { key: "imageGeneratorPro", label: "NanoBanana Pro", description: "高质量图片生成 / PPT 页面图片生成" },
-  { key: "imageGeneratorFast", label: "NanoBanana", description: "快速图片生成节点" },
-  { key: "imageGeneratorNB2", label: "NanoBanana2", description: "推荐首选图片生成节点" },
-  { key: "dalleGenerator", label: "DALL-E 绘图", description: "OpenAI DALL-E 图片生成节点" },
+  { key: "imageGeneratorPro", label: "Gemini Pro 图片协议", description: "兼容 Gemini generateContent 的专业图片配置" },
+  { key: "imageGeneratorFast", label: "Gemini Fast 图片协议", description: "兼容 Gemini generateContent 的快速图片配置" },
+  { key: "imageGeneratorNB2", label: "Gemini 图片协议", description: "统一绘图节点的 Gemini generateContent 供应商" },
+  { key: "dalleGenerator", label: "DALL-E 绘图", description: "旧版 DALL-E Images API 配置" },
   { key: "fluxGenerator", label: "Flux 绘图", description: "Flux 图片生成节点" },
-  { key: "gptImageGenerator", label: "GPT Image 绘图", description: "OpenAI GPT Image 图片生成节点" },
+  { key: "gptImageGenerator", label: "OpenAI Images API", description: "统一绘图节点的 /images/generations 与 /images/edits 供应商" },
   { key: "doubaoGenerator", label: "豆包绘图", description: "字节跳动豆包图片生成节点" },
   { key: "zImageGenerator", label: "Z-Image 绘图", description: "Gitee AI Z-Image 图片生成节点" },
-  { key: "videoGenerator", label: "视频生成", description: "Sora 视频生成节点" },
+  { key: "videoGenerator", label: "OpenAI Videos API", description: "统一视频节点的 /v1/videos 供应商" },
+  { key: "newApiVideoGenerator", label: "new-api 通用视频", description: "统一视频节点的 /v1/video/generations 供应商" },
   { key: "veoGenerator", label: "Veo 视频生成", description: "Gemini Veo 视频生成节点" },
   { key: "klingGenerator", label: "Kling 视频生成", description: "Kling 视频生成节点" },
   { key: "llmContent", label: "LLM 内容生成", description: "大语言模型内容生成节点" },
@@ -83,7 +84,7 @@ const nodeGroups: NodeGroup[] = [
     icon: Video,
     colorClass: "text-purple-500",
     bgClass: "bg-purple-500/10",
-    nodeKeys: ["videoGenerator", "veoGenerator", "klingGenerator"],
+    nodeKeys: ["videoGenerator", "newApiVideoGenerator"],
   },
   {
     id: "llm",

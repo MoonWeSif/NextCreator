@@ -6,6 +6,7 @@
 import type { Node, Edge } from "@xyflow/react";
 import type {
   CustomNodeData,
+  CustomEdge,
   ImageGeneratorNodeData,
   LLMContentNodeData,
   VideoGeneratorNodeData,
@@ -17,15 +18,34 @@ import { useFlowStore } from "@/stores/flowStore";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { generateImage, editImage } from "@/services/imageGeneration";
 import { generateLLMContent } from "@/services/llmService";
-import { createVideoTask, pollVideoTask } from "@/services/videoGeneration";
+import { createVideoTask, getVideoContentBlobUrl, pollVideoTask } from "@/services/videoGeneration";
 import { saveImage, readImage } from "@/services/fileStorageService";
 import {
   buildImageGenerationRequest,
-  getImageEngineConfig,
-  getResolvedGptImageSize,
+  getImageApiProtocol,
+  getImageApiProtocolConfig,
+  getResolvedOpenAIImageSize,
   validateGptImage2Size,
 } from "@/components/nodes/imageGeneratorConfig";
 import { compositeWithMask } from "@/utils/imageMask";
+import {
+  buildImageGeneratorPrompt,
+  getPromptMentionSourcesForNode,
+} from "@/utils/promptMentions";
+import {
+  buildVideoGenerationRequest,
+  getVideoApiProtocol,
+  getVideoApiProtocolConfig,
+} from "@/components/nodes/videoGeneratorConfig";
+import {
+  buildLLMGenerationParams,
+  getLLMApiProtocol,
+} from "@/components/nodes/llmContentConfig";
+import {
+  isFileInputEdge,
+  isImageInputEdge,
+  isPromptInputEdge,
+} from "@/utils/connectionHandles";
 
 // 自定义节点类型
 type CustomNode = Node<CustomNodeData>;
@@ -42,6 +62,36 @@ interface ConnectedImageInfo {
 
 function isImageOutputNodeType(type?: string): boolean {
   return type === "imageGeneratorNode";
+}
+
+function getVideoProviderNodeType(protocol: ReturnType<typeof getVideoApiProtocol>) {
+  return protocol === "newapi-video-generations" ? "newApiVideoGenerator" : "videoGenerator";
+}
+
+function stripDataUrlPrefix(data: string) {
+  const match = data.match(/^data:([^;]+);base64,(.*)$/);
+  if (!match) return { mimeType: undefined, data };
+  return { mimeType: match[1], data: match[2] };
+}
+
+function guessImageMimeType(data: string) {
+  const parsed = stripDataUrlPrefix(data);
+  if (parsed.mimeType) return parsed.mimeType;
+  if (data.startsWith("/9j/")) return "image/jpeg";
+  if (data.startsWith("iVBORw0KGgo")) return "image/png";
+  if (data.startsWith("UklGR")) return "image/webp";
+  return "image/png";
+}
+
+function imageToLLMFile(imageData: string, index: number) {
+  const parsed = stripDataUrlPrefix(imageData);
+  const mimeType = parsed.mimeType || guessImageMimeType(imageData);
+  const extension = mimeType.split("/")[1] || "png";
+  return {
+    data: parsed.data,
+    mimeType,
+    fileName: `image-${index + 1}.${extension}`,
+  };
 }
 
 /**
@@ -81,10 +131,9 @@ async function getConnectedInputDataFromCanvas(
   for (const edge of incomingEdges) {
     const sourceNode = nodes.find((n) => n.id === edge.source);
     if (!sourceNode) continue;
+    const targetNode = nodes.find((n) => n.id === edge.target);
 
-    const targetHandle = edge.targetHandle;
-
-    if (targetHandle === "input-prompt") {
+    if (isPromptInputEdge(edge, sourceNode, targetNode)) {
       // 从 prompt 输入端口连接的数据（支持多个，会自动拼接）
       if (sourceNode.type === "promptNode") {
         const data = sourceNode.data as { prompt?: string };
@@ -93,7 +142,7 @@ async function getConnectedInputDataFromCanvas(
         const data = sourceNode.data as { outputContent?: string };
         if (data.outputContent) prompts.push(data.outputContent);
       }
-    } else if (targetHandle === "input-image") {
+    } else if (isImageInputEdge(edge, sourceNode, targetNode)) {
       let imageData: string | undefined;
       if (sourceNode.type === "imageInputNode") {
         const data = sourceNode.data as { imageData?: string; imagePath?: string };
@@ -125,7 +174,7 @@ async function getConnectedInputDataFromCanvas(
       if (imageData) {
         images.push(imageData);
       }
-    } else if (targetHandle === "input-file") {
+    } else if (isFileInputEdge(edge, sourceNode, targetNode)) {
       if (sourceNode.type === "fileUploadNode") {
         const data = sourceNode.data as { fileData?: string; mimeType?: string; fileName?: string };
         if (data.fileData && data.mimeType) {
@@ -186,6 +235,22 @@ async function getConnectedInputDataFromCanvas(
   return { prompt, images, files };
 }
 
+function getPromptMentionSourcesFromCanvas(nodeId: string, canvasId: string) {
+  const { activeCanvasId } = useCanvasStore.getState();
+
+  if (canvasId === activeCanvasId) {
+    const { nodes, edges } = useFlowStore.getState();
+    return getPromptMentionSourcesForNode(nodes, edges, nodeId);
+  }
+
+  const canvas = useCanvasStore.getState().canvases.find((c) => c.id === canvasId);
+  if (!canvas) {
+    return [];
+  }
+
+  return getPromptMentionSourcesForNode(canvas.nodes as CustomNode[], canvas.edges as Edge[], nodeId);
+}
+
 async function getConnectedImageDetailsFromCanvas(
   nodeId: string,
   canvasId: string
@@ -209,9 +274,9 @@ async function getConnectedImageDetailsFromCanvas(
   for (const edge of incomingEdges) {
     const sourceNode = nodes.find((n) => n.id === edge.source);
     if (!sourceNode) continue;
+    const targetNode = nodes.find((n) => n.id === edge.target);
 
-    const targetHandle = edge.targetHandle;
-    if (targetHandle !== "input-image" && targetHandle) continue;
+    if (!isImageInputEdge(edge, sourceNode, targetNode)) continue;
 
     if (sourceNode.type === "imageInputNode") {
       const data = sourceNode.data as {
@@ -334,9 +399,12 @@ async function executeImageGeneratorNode(
   signal?: AbortSignal
 ): Promise<NodeExecutionResult> {
   const data = node.data as ImageGeneratorNodeData;
-  const config = getImageEngineConfig(data.engine);
+  const apiProtocol = getImageApiProtocol(data);
+  const config = getImageApiProtocolConfig(apiProtocol);
   // 使用画布感知的数据读取，解决画布切换问题（异步从文件加载图片）
   const { prompt } = await getConnectedInputDataFromCanvas(node.id, canvasId);
+  const mentionSources = getPromptMentionSourcesFromCanvas(node.id, canvasId);
+  const resolvedPrompt = buildImageGeneratorPrompt(data.prompt, prompt, mentionSources);
   const connectedImageDetails = await getConnectedImageDetailsFromCanvas(node.id, canvasId);
   const orderedImageDetails = [...connectedImageDetails].sort((a, b) => {
     return Number(!!b.hasMask && !!b.maskImageData) - Number(!!a.hasMask && !!a.maskImageData);
@@ -344,12 +412,12 @@ async function executeImageGeneratorNode(
   const inputImages = config.supportsImageInput
     ? orderedImageDetails.map((img) => img.imageData).filter(Boolean)
     : [];
-  const maskImage = config.hasGptImageControls
+  const maskImage = config.hasOpenAIImageControls
     ? orderedImageDetails.find((img) => img.hasMask && img.maskImageData)?.maskImageData
     : undefined;
 
   // 验证输入
-  if (!prompt) {
+  if (!resolvedPrompt) {
     updateNodeDataWithCanvas<ImageGeneratorNodeData>(node.id, canvasId, {
       status: "error",
       error: "缺少必需的提示词输入",
@@ -358,8 +426,9 @@ async function executeImageGeneratorNode(
   }
 
   const model = data.model || config.defaultModel;
-  const sizeValidationError = config.hasGptImageControls && model === "gpt-image-2"
-    ? validateGptImage2Size(getResolvedGptImageSize(data))
+  const resolvedSize = getResolvedOpenAIImageSize({ ...data, model });
+  const sizeValidationError = config.hasOpenAIImageControls && model === "gpt-image-2"
+    ? validateGptImage2Size(resolvedSize)
     : undefined;
   if (sizeValidationError) {
     updateNodeDataWithCanvas<ImageGeneratorNodeData>(node.id, canvasId, {
@@ -376,15 +445,15 @@ async function executeImageGeneratorNode(
   });
 
   try {
-    let finalPrompt = prompt;
-    if (!config.hasGptImageControls && inputImages.length > 0) {
+    let finalPrompt = resolvedPrompt;
+    if (!config.hasOpenAIImageControls && inputImages.length > 0) {
       const hasMaskInput = connectedImageDetails.some((img) => img.hasMask);
       if (hasMaskInput) {
-        finalPrompt = `I'm providing two images: the original image and the same image with red highlighted areas marking the regions I want you to edit. Please edit ONLY the red-marked areas according to this instruction: ${prompt}`;
+        finalPrompt = `I'm providing two images: the original image and the same image with red highlighted areas marking the regions I want you to edit. Please edit ONLY the red-marked areas according to this instruction: ${resolvedPrompt}`;
       }
     }
 
-    if (!config.hasGptImageControls) {
+    if (!config.hasOpenAIImageControls) {
       for (const img of orderedImageDetails) {
         if (!img.hasMask || !img.maskImageData || !img.imageData) continue;
         try {
@@ -396,7 +465,7 @@ async function executeImageGeneratorNode(
     }
 
     const request = buildImageGenerationRequest(
-      { ...data, model },
+      { ...data, apiProtocol, model },
       finalPrompt,
       inputImages.length > 0 ? inputImages : undefined,
       maskImage
@@ -427,26 +496,40 @@ async function executeImageGeneratorNode(
 
     // 保存图片
     let imagePath: string | undefined;
+    let imagePaths: string[] | undefined;
     if (response.imageData) {
       try {
-        const imageInfo = await saveImage(response.imageData, canvasId, node.id);
-        imagePath = imageInfo.path;
+        const imagesToSave = response.imageDataList?.length
+          ? response.imageDataList
+          : [response.imageData];
+        const savedImages = await Promise.all(
+          imagesToSave.map((imageData) => saveImage(imageData, canvasId, node.id))
+        );
+        imagePaths = savedImages.map((image) => image.path);
+        imagePath = imagePaths[0];
       } catch {
         // 文件保存失败，回退到 base64
       }
     }
+    const imageDataList = response.imageDataList?.length
+      ? response.imageDataList
+      : response.imageData
+        ? [response.imageData]
+        : undefined;
 
     // 更新成功状态
     updateNodeDataWithCanvas<ImageGeneratorNodeData>(node.id, canvasId, {
       status: "success",
-      outputImage: response.imageData,
+      outputImage: imagePath ? undefined : response.imageData,
       outputImagePath: imagePath,
+      outputImages: imagePath ? undefined : imageDataList,
+      outputImagePaths: imagePaths,
       error: undefined,
     });
 
     return {
       success: true,
-      output: { imageData: response.imageData, imagePath },
+      output: { imageData: response.imageData, imageDataList, imagePath, imagePaths },
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "执行失败";
@@ -478,15 +561,20 @@ async function executeLLMContentNode(
 ): Promise<NodeExecutionResult> {
   const data = node.data as LLMContentNodeData;
   // 使用画布感知的数据读取，解决画布切换问题（异步从文件加载图片）
-  const { prompt, files } = await getConnectedInputDataFromCanvas(node.id, canvasId);
+  const { prompt, files, images } = await getConnectedInputDataFromCanvas(node.id, canvasId);
+  const mentionSources = getPromptMentionSourcesFromCanvas(node.id, canvasId);
+  const resolvedPrompt = buildImageGeneratorPrompt(data.prompt, prompt, mentionSources);
+  const imageFiles = images.map(imageToLLMFile);
+  const allFiles = [...files, ...imageFiles];
+  const apiProtocol = getLLMApiProtocol(data);
 
   // 验证输入
-  if (!prompt && files.length === 0) {
+  if (!resolvedPrompt && allFiles.length === 0) {
     updateNodeDataWithCanvas<LLMContentNodeData>(node.id, canvasId, {
       status: "error",
-      error: "缺少必需的提示词或文件输入",
+      error: "缺少必需的提示词、图片或文件输入",
     });
-    return { success: false, error: "缺少必需的提示词或文件输入" };
+    return { success: false, error: "缺少必需的提示词、图片或文件输入" };
   }
 
   // 更新状态为加载中
@@ -505,14 +593,12 @@ async function executeLLMContentNode(
       return { success: false, error: "已取消" };
     }
 
-    const response = await generateLLMContent({
-      prompt: prompt || "请分析这个文件的内容",
-      model: data.model,
-      systemPrompt: data.systemPrompt || undefined,
-      temperature: data.temperature,
-      maxTokens: data.maxTokens,
-      files: files.length > 0 ? files : undefined,
-    });
+    const request = buildLLMGenerationParams(
+      { ...data, apiProtocol },
+      resolvedPrompt || "请分析输入内容",
+      allFiles
+    );
+    const response = await generateLLMContent(request);
 
     // 检查中断
     if (signal?.aborted) {
@@ -565,9 +651,17 @@ async function executeVideoGeneratorNode(
   const data = node.data as VideoGeneratorNodeData;
   // 使用画布感知的数据读取，解决画布切换问题（异步从文件加载图片）
   const { prompt, images } = await getConnectedInputDataFromCanvas(node.id, canvasId);
+  const canvas = useCanvasStore.getState().canvases.find((c) => c.id === canvasId);
+  const nodes = (canvas?.nodes || useFlowStore.getState().nodes) as CustomNode[];
+  const edges = (canvas?.edges || useFlowStore.getState().edges) as CustomEdge[];
+  const mentionSources = getPromptMentionSourcesForNode(nodes, edges, node.id);
+  const resolvedPrompt = buildImageGeneratorPrompt(data.prompt, prompt, mentionSources);
+  const apiProtocol = getVideoApiProtocol(data);
+  const config = getVideoApiProtocolConfig(apiProtocol);
+  const providerNodeType = getVideoProviderNodeType(apiProtocol);
 
   // 验证输入
-  if (!prompt) {
+  if (!resolvedPrompt) {
     updateNodeDataWithCanvas<VideoGeneratorNodeData>(node.id, canvasId, {
       status: "error",
       error: "缺少必需的提示词输入",
@@ -592,14 +686,25 @@ async function executeVideoGeneratorNode(
       return { success: false, error: "已取消" };
     }
 
+    let request;
+    try {
+      request = buildVideoGenerationRequest(
+        { ...data, apiProtocol, model: data.model || config.defaultModel },
+        resolvedPrompt,
+        images
+      );
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "视频参数无效";
+      updateNodeDataWithCanvas<VideoGeneratorNodeData>(node.id, canvasId, {
+        status: "error",
+        error: errorMsg,
+        taskStage: "failed",
+      });
+      return { success: false, error: errorMsg };
+    }
+
     // 创建任务（传递 signal 以支持取消）
-    const createResult = await createVideoTask({
-      prompt,
-      model: data.model,
-      seconds: data.seconds,
-      size: data.size,
-      inputImage: images.length > 0 ? images[0] : undefined,
-    }, "videoGenerator", signal);
+    const createResult = await createVideoTask(request, providerNodeType, signal);
 
     if (createResult.error || !createResult.taskId) {
       const errorMsg = createResult.error || "创建任务失败";
@@ -628,7 +733,7 @@ async function executeVideoGeneratorNode(
         progress: info.progress,
         taskStage: info.stage,
       });
-    }, 120, 5000, signal);
+    }, 120, 5000, signal, providerNodeType);
 
     // 检查中断
     if (signal?.aborted) {
@@ -649,17 +754,46 @@ async function executeVideoGeneratorNode(
       return { success: false, error: pollResult.error };
     }
 
+    let outputVideo = pollResult.videoUrl;
+    const videoData = pollResult.videoData;
+
+    if (!outputVideo && !videoData) {
+      const contentResult = await getVideoContentBlobUrl(taskId, providerNodeType);
+      if (signal?.aborted) {
+        updateNodeDataWithCanvas<VideoGeneratorNodeData>(node.id, canvasId, {
+          status: "idle",
+          taskStage: undefined,
+          progress: undefined,
+        });
+        return { success: false, error: "已取消" };
+      }
+
+      if (contentResult.error || !contentResult.url) {
+        const errorMsg = contentResult.error || "视频任务已完成，但没有获取到可预览的视频内容";
+        updateNodeDataWithCanvas<VideoGeneratorNodeData>(node.id, canvasId, {
+          status: "error",
+          error: errorMsg,
+          taskStage: "failed",
+        });
+        return { success: false, error: errorMsg };
+      }
+
+      outputVideo = contentResult.url;
+    }
+
     // 更新成功状态
     updateNodeDataWithCanvas<VideoGeneratorNodeData>(node.id, canvasId, {
       status: "success",
       taskStage: "completed",
       progress: 100,
+      outputVideo,
+      videoData,
       error: undefined,
     });
 
     return {
       success: true,
-      output: { taskId },
+      output: { taskId, videoUrl: outputVideo, videoData },
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "执行失败";

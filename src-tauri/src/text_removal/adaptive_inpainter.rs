@@ -15,10 +15,7 @@ enum BackgroundStrategy {
     Gradient { fallback_color: [u8; 3] },
 }
 
-pub fn adaptive_inpaint(
-    image: &RgbImage,
-    regions: &[TextRegion],
-) -> Result<RgbImage, String> {
+pub fn adaptive_inpaint(image: &RgbImage, regions: &[TextRegion]) -> Result<RgbImage, String> {
     let mut result = image.clone();
     let (width, height) = result.dimensions();
 
@@ -109,11 +106,7 @@ fn mask_bbox(mask: &GrayImage) -> Option<(u32, u32, u32, u32)> {
     }
 }
 
-fn collect_border_samples(
-    image: &RgbImage,
-    mask: &GrayImage,
-    border_width: u32,
-) -> Vec<Sample> {
+fn collect_border_samples(image: &RgbImage, mask: &GrayImage, border_width: u32) -> Vec<Sample> {
     let (width, height) = mask.dimensions();
     let Some((min_x, max_x, min_y, max_y)) = mask_bbox(mask) else {
         return vec![];
@@ -329,18 +322,16 @@ fn blend_into(base: &mut RgbImage, fill: &RgbImage, mask_feather: &[f32]) {
             let r = dst[0] as f32 * m + src[0] as f32 * inv;
             let g = dst[1] as f32 * m + src[1] as f32 * inv;
             let b = dst[2] as f32 * m + src[2] as f32 * inv;
-            base.put_pixel(x, y, Rgb([r.round() as u8, g.round() as u8, b.round() as u8]));
+            base.put_pixel(
+                x,
+                y,
+                Rgb([r.round() as u8, g.round() as u8, b.round() as u8]),
+            );
         }
     }
 }
 
-fn mean_color_range(
-    image: &RgbImage,
-    x0: i32,
-    x1: i32,
-    y0: i32,
-    y1: i32,
-) -> Option<[f64; 3]> {
+fn mean_color_range(image: &RgbImage, x0: i32, x1: i32, y0: i32, y1: i32) -> Option<[f64; 3]> {
     if x0 > x1 || y0 > y1 {
         return None;
     }
@@ -390,15 +381,11 @@ fn lerp_color(a: [f64; 3], b: [f64; 3], t: f64) -> [u8; 3] {
     ]
 }
 
-
 fn gaussian_blur_mask(mask: &GrayImage, radius: u32) -> Vec<f32> {
     let (width, height) = mask.dimensions();
     let size = (width * height) as usize;
     if radius == 0 {
-        return mask
-            .pixels()
-            .map(|p| p[0] as f32 / 255.0)
-            .collect();
+        return mask.pixels().map(|p| p[0] as f32 / 255.0).collect();
     }
 
     let kernel = gaussian_kernel(radius);

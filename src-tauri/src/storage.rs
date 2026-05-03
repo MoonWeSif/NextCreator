@@ -9,8 +9,8 @@ use uuid::Uuid;
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "lowercase")]
 pub enum ImageType {
-    Input,      // 用户上传的输入图片
-    Generated,  // AI 生成的图片
+    Input,     // 用户上传的输入图片
+    Generated, // AI 生成的图片
 }
 
 // 图片信息结构
@@ -23,7 +23,7 @@ pub struct ImageInfo {
     pub created_at: i64,
     pub canvas_id: Option<String>,
     pub node_id: Option<String>,
-    pub image_type: Option<ImageType>,  // 新增：图片类型
+    pub image_type: Option<ImageType>, // 新增：图片类型
 }
 
 // 图片元数据结构（持久化存储）
@@ -53,7 +53,7 @@ pub struct ImageInfoWithMetadata {
     pub created_at: i64,
     pub canvas_id: Option<String>,
     pub node_id: Option<String>,
-    pub image_type: Option<ImageType>,  // 新增：图片类型
+    pub image_type: Option<ImageType>, // 新增：图片类型
     pub metadata: Option<ImageMetadata>,
 }
 
@@ -105,7 +105,10 @@ fn guess_image_extension(image_data: &[u8]) -> &'static str {
         "png"
     } else if image_data.starts_with(b"\xff\xd8\xff") {
         "jpg"
-    } else if image_data.len() >= 12 && &image_data[0..4] == b"RIFF" && &image_data[8..12] == b"WEBP" {
+    } else if image_data.len() >= 12
+        && &image_data[0..4] == b"RIFF"
+        && &image_data[8..12] == b"WEBP"
+    {
         "webp"
     } else if image_data.starts_with(b"GIF87a") || image_data.starts_with(b"GIF89a") {
         "gif"
@@ -123,7 +126,7 @@ pub fn save_image(
     node_id: Option<String>,
     prompt: Option<String>,
     input_images: Option<Vec<InputImageInfo>>,
-    image_type: Option<ImageType>,  // 新增：图片类型
+    image_type: Option<ImageType>, // 新增：图片类型
 ) -> Result<ImageInfo, String> {
     let images_dir = get_images_dir(&app)?;
 
@@ -172,10 +175,7 @@ pub fn save_image(
         fs::write(&meta_path, meta_json).map_err(|e| format!("写入元数据失败: {}", e))?;
     }
 
-    let path_str = file_path
-        .to_str()
-        .ok_or("路径转换失败")?
-        .to_string();
+    let path_str = file_path.to_str().ok_or("路径转换失败")?.to_string();
 
     Ok(ImageInfo {
         id,
@@ -185,7 +185,7 @@ pub fn save_image(
         created_at: timestamp,
         canvas_id,
         node_id,
-        image_type,  // 返回图片类型
+        image_type, // 返回图片类型
     })
 }
 
@@ -263,11 +263,8 @@ pub fn get_storage_stats(app: tauri::AppHandle) -> Result<StorageStats, String> 
                             if let Ok(metadata) = file.metadata() {
                                 if metadata.is_file() {
                                     // 只统计图片文件，排除元数据文件
-                                    let filename = file
-                                        .file_name()
-                                        .to_str()
-                                        .unwrap_or("")
-                                        .to_string();
+                                    let filename =
+                                        file.file_name().to_str().unwrap_or("").to_string();
                                     if !filename.ends_with(".meta.json") {
                                         canvas_size += metadata.len();
                                         canvas_count += 1;
@@ -413,9 +410,9 @@ pub fn list_canvas_images(
                     let meta_filename = filename.replace(".png", ".meta.json");
                     let meta_path = canvas_dir.join(&meta_filename);
                     let metadata = if meta_path.exists() {
-                        fs::read_to_string(&meta_path)
-                            .ok()
-                            .and_then(|content| serde_json::from_str::<ImageMetadata>(&content).ok())
+                        fs::read_to_string(&meta_path).ok().and_then(|content| {
+                            serde_json::from_str::<ImageMetadata>(&content).ok()
+                        })
                     } else {
                         None
                     };
@@ -424,7 +421,8 @@ pub fn list_canvas_images(
                     let node_id = metadata.as_ref().and_then(|m| m.node_id.clone());
 
                     // 推断图片类型：有 prompt 说明是生成的，否则可能是输入的
-                    let image_type = if metadata.as_ref().and_then(|m| m.prompt.as_ref()).is_some() {
+                    let image_type = if metadata.as_ref().and_then(|m| m.prompt.as_ref()).is_some()
+                    {
                         Some(ImageType::Generated)
                     } else if metadata.is_none() {
                         // 旧数据没有元数据，可能是输入图片
@@ -465,11 +463,10 @@ pub fn read_image_metadata(image_path: String) -> Result<Option<ImageMetadata>, 
         return Ok(None);
     }
 
-    let content = fs::read_to_string(&meta_path)
-        .map_err(|e| format!("读取元数据失败: {}", e))?;
+    let content = fs::read_to_string(&meta_path).map_err(|e| format!("读取元数据失败: {}", e))?;
 
-    let metadata: ImageMetadata = serde_json::from_str(&content)
-        .map_err(|e| format!("解析元数据失败: {}", e))?;
+    let metadata: ImageMetadata =
+        serde_json::from_str(&content).map_err(|e| format!("解析元数据失败: {}", e))?;
 
     Ok(Some(metadata))
 }

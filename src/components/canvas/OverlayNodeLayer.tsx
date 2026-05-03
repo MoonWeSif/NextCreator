@@ -53,7 +53,7 @@ export function OverlayNodeLayer({
             <div className="canvas-node-overlay-scale">
               <div className="relative">
                 {descriptor.showHandleMarkers !== false &&
-                  descriptor.handles.map((handle) => (
+                  descriptor.handles.filter((handle) => handle.showMarker !== false).map((handle) => (
                     <div key={`${handle.type}-${handle.id}`}>
                       <div
                         className={`canvas-node-overlay-handle absolute ${

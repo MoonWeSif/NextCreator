@@ -3,6 +3,7 @@
  */
 
 import type { ProviderProtocol, ErrorDetails } from "@/types";
+import type { ImageApiProtocol } from "@/components/nodes/imageGeneratorConfig";
 
 /**
  * 图片生成能力枚举
@@ -21,6 +22,7 @@ export type ImageGenerationCapability =
 export interface ImageGenerationRequest {
   prompt: string;
   model: string;
+  apiProtocol?: ImageApiProtocol;
   inputImages?: string[]; // base64 图片数组
   maskImage?: string; // base64 蒙版图片，仅用于支持蒙版的编辑接口
   aspectRatio?: string; // 宽高比
@@ -31,7 +33,8 @@ export interface ImageGenerationRequest {
   outputFormat?: string; // 输出格式，如 png/jpeg/webp
   outputCompression?: number; // jpeg/webp 压缩比例 0-100
   moderation?: string; // 内容审核强度，如 auto/low
-  inputFidelity?: string; // 输入图保真度，GPT Image 2 会自动高保真且不允许传入
+  inputFidelity?: string; // 参考图保真度，gpt-image-2 必须省略
+  n?: number; // 生成数量，OpenAI Images API 支持
   negativePrompt?: string; // 负面提示词（部分供应商支持）
   seed?: number; // 随机种子
   steps?: number; // 生成步数
@@ -45,6 +48,7 @@ export interface ImageGenerationRequest {
  */
 export interface ImageGenerationResponse {
   imageData?: string; // base64 图片数据
+  imageDataList?: string[]; // 多图响应，第一张与 imageData 保持一致
   text?: string; // 附带文本（如 Gemini 的描述）
   error?: string;
   errorDetails?: ErrorDetails;

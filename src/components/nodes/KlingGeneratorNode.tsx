@@ -418,7 +418,7 @@ export const KlingGeneratorNode = memo(({ id, data, selected }: NodeProps<KlingG
   const currentStage = data.taskStage ? stageConfig[data.taskStage] : null;
 
   // 节点样式配置
-  const headerGradient = "bg-gradient-to-r from-cyan-500 to-blue-500";
+  const headerGradient = "nc-node-header nc-node-header-accent";
   const outputHandleColor = "!bg-cyan-500";
 
   // 获取模式标签
@@ -460,8 +460,8 @@ export const KlingGeneratorNode = memo(({ id, data, selected }: NodeProps<KlingG
     <>
       <div
         className={`
-          w-[220px] rounded-xl bg-base-100 shadow-lg border-2 transition-all
-          ${selected ? "border-primary shadow-primary/20" : "border-base-300"}
+          nc-node-card nc-node-accent-teal w-[220px] transition-all
+          ${selected ? "nc-node-card-selected" : ""}
         `}
       >
         {!isOverlay && (
@@ -497,15 +497,17 @@ export const KlingGeneratorNode = memo(({ id, data, selected }: NodeProps<KlingG
         )}
 
         {/* 节点头部 */}
-        <div className={`flex items-center justify-between px-3 py-2 ${headerGradient} rounded-t-lg`}>
+        <div className={headerGradient}>
           <div className="flex items-center gap-2">
-            <Video className="w-4 h-4 text-white" />
-            <span className="text-sm font-medium text-white">{data.label}</span>
+            <span className="nc-node-header-icon">
+              <Video className="w-4 h-4" />
+            </span>
+            <span className="text-sm font-semibold truncate">{data.label}</span>
           </div>
           <div className="flex items-center gap-1">
             {!isPromptConnected && (
               <div className="tooltip tooltip-left" data-tip="请连接提示词节点">
-                <CircleAlert className="w-4 h-4 text-white/80" />
+                <CircleAlert className="w-4 h-4 text-warning" />
               </div>
             )}
             {isPromptConnected && hasEmptyImageInputs && currentMode === "image2video" && (
@@ -513,7 +515,7 @@ export const KlingGeneratorNode = memo(({ id, data, selected }: NodeProps<KlingG
                 <AlertTriangle className="w-4 h-4 text-yellow-300" />
               </div>
             )}
-            <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded text-white uppercase">
+            <span className="nc-badge uppercase">
               KLING
             </span>
           </div>
@@ -775,13 +777,15 @@ function KlingDetailModal({ data, onClose, onUpdateData }: KlingDetailModalProps
         onClick={(e) => e.stopPropagation()}
       >
         {/* 头部 */}
-        <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-cyan-500 to-blue-500">
+        <div className="nc-node-header nc-node-header-accent nc-node-accent-teal px-4 py-3">
           <div className="flex items-center gap-2">
-            <Video className="w-5 h-5 text-white" />
-            <span className="text-base font-medium text-white">Kling 视频生成设置</span>
+            <span className="nc-node-header-icon">
+              <Video className="w-5 h-5" />
+            </span>
+            <span className="text-base font-semibold">Kling 视频生成设置</span>
           </div>
           <button
-            className="btn btn-circle btn-ghost btn-sm text-white hover:bg-white/20"
+            className="btn btn-circle btn-ghost btn-sm"
             onClick={handleClose}
           >
             <X className="w-4 h-4" />

@@ -3,7 +3,7 @@
  */
 
 import { videoGenerationRegistry } from "./registry";
-import { soraVideoProvider, veoVideoProvider } from "./providers";
+import { newApiVideoProvider, soraVideoProvider, veoVideoProvider } from "./providers";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { toast } from "@/stores/toastStore";
 import type {
@@ -15,6 +15,7 @@ import type {
   VideoProgressInfo,
   VideoTaskStage,
 } from "./types";
+import type { VideoApiProtocol } from "@/components/nodes/videoGeneratorConfig";
 
 /**
  * 初始化注册所有提供商
@@ -22,6 +23,8 @@ import type {
 export function initializeVideoGenerationProviders(): void {
   // 注册 Sora 提供商（OpenAI Video API 格式）
   videoGenerationRegistry.register(soraVideoProvider);
+  // 注册 new-api 通用视频任务协议
+  videoGenerationRegistry.register(newApiVideoProvider);
   // 注册 Veo 提供商（Gemini Veo API 格式）
   videoGenerationRegistry.register(veoVideoProvider);
 
@@ -29,6 +32,33 @@ export function initializeVideoGenerationProviders(): void {
     "[VideoGenService] Providers initialized:",
     videoGenerationRegistry.getAll().map((p) => p.id)
   );
+}
+
+function getProviderKeyForVideoProtocol(protocol?: VideoApiProtocol): VideoNodeType | undefined {
+  if (protocol === "openai-videos") return "videoGenerator";
+  if (protocol === "newapi-video-generations") return "newApiVideoGenerator";
+  return undefined;
+}
+
+function getProviderConfigForRequest(
+  nodeType: VideoNodeType,
+  request: VideoGenerationRequest
+): { nodeType: VideoNodeType; config: VideoProviderConfig } {
+  const protocolNodeType = getProviderKeyForVideoProtocol(request.apiProtocol);
+  const resolvedNodeType = protocolNodeType || nodeType;
+
+  return {
+    nodeType: resolvedNodeType,
+    config: getProviderConfig(resolvedNodeType),
+  };
+}
+
+function getProviderForNodeType(nodeType: VideoNodeType, config: VideoProviderConfig) {
+  if (nodeType === "videoGenerator") return videoGenerationRegistry.get("sora");
+  if (nodeType === "newApiVideoGenerator") return videoGenerationRegistry.get("newApiVideo");
+  if (nodeType === "veoGenerator") return videoGenerationRegistry.get("veo");
+
+  return videoGenerationRegistry.getByProtocol(config.protocol);
 }
 
 /**
@@ -68,19 +98,19 @@ export async function createVideoTask(
   abortSignal?: AbortSignal
 ): Promise<VideoTaskResponse> {
   try {
-    const config = getProviderConfig(nodeType);
+    const { nodeType: providerNodeType, config } = getProviderConfigForRequest(nodeType, request);
 
-    // 根据协议获取对应的提供商实现
-    const provider = videoGenerationRegistry.getByProtocol(config.protocol);
+    // 同一个 openai 供应商协议下可能存在 OpenAI Videos 和 new-api 通用视频两种任务协议。
+    const provider = getProviderForNodeType(providerNodeType, config);
 
     if (!provider) {
       return {
-        error: `不支持的协议类型: ${config.protocol}，请检查供应商配置`,
+        error: `不支持的视频接口规范，请检查供应商配置`,
       };
     }
 
     console.log(
-      `[VideoGenService] Using provider: ${provider.id} for ${nodeType}`
+      `[VideoGenService] Using provider: ${provider.id} for ${providerNodeType}`
     );
 
     return await provider.createTask(request, config, abortSignal);
@@ -99,7 +129,7 @@ export async function getVideoTaskStatus(
 ): Promise<VideoTaskResponse> {
   try {
     const config = getProviderConfig(nodeType);
-    const provider = videoGenerationRegistry.getByProtocol(config.protocol);
+    const provider = getProviderForNodeType(nodeType, config);
 
     if (!provider) {
       return { error: `不支持的协议类型: ${config.protocol}` };
@@ -121,13 +151,17 @@ export async function getVideoContentBlobUrl(
 ): Promise<{ url?: string; error?: string }> {
   try {
     const config = getProviderConfig(nodeType);
-    const provider = videoGenerationRegistry.getByProtocol(config.protocol);
+    const provider = getProviderForNodeType(nodeType, config);
 
     if (!provider) {
       return { error: `不支持的协议类型: ${config.protocol}` };
     }
 
     const result = await provider.getVideoContent(taskId, config);
+
+    if (result.videoUrl) {
+      return { url: result.videoUrl };
+    }
 
     if (result.error || !result.videoData) {
       return { error: result.error || "获取视频失败" };
@@ -160,7 +194,7 @@ export async function downloadVideo(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const config = getProviderConfig(nodeType);
-    const provider = videoGenerationRegistry.getByProtocol(config.protocol);
+    const provider = getProviderForNodeType(nodeType, config);
 
     if (!provider) {
       const errorMsg = `不支持的协议类型: ${config.protocol}`;
@@ -172,6 +206,12 @@ export async function downloadVideo(
 
     console.log("[VideoGenService] Downloading video...");
     const result = await provider.getVideoContent(taskId, config);
+
+    if (result.videoUrl) {
+      window.open(result.videoUrl, "_blank", "noopener,noreferrer");
+      toast.success("已打开视频链接");
+      return { success: true };
+    }
 
     if (result.error || !result.videoData) {
       const errorMsg = result.error || "下载视频失败";
@@ -250,11 +290,28 @@ export async function pollVideoTask(
         taskId,
         status: "completed",
         progress: 100,
+        videoUrl: statusResult.videoUrl,
+        videoData: statusResult.videoData,
+        format: statusResult.format,
+        metadata: statusResult.metadata,
+        statusSnapshot: {
+          taskId,
+          status: "completed",
+          progress: 100,
+          videoUrl: statusResult.videoUrl,
+          videoData: statusResult.videoData,
+          format: statusResult.format,
+          metadata: statusResult.metadata,
+          raw: statusResult.raw,
+        },
       };
     }
 
     if (stage === "failed") {
-      return { error: statusResult.error || "视频生成失败" };
+      return {
+        error: statusResult.error || "视频生成失败",
+        errorDetails: statusResult.errorDetails,
+      };
     }
 
     // 等待后继续轮询（可中断的等待）
@@ -308,7 +365,7 @@ export async function generateVideo(
 export function getVideoProviderCapabilities(nodeType: VideoNodeType) {
   try {
     const config = getProviderConfig(nodeType);
-    const provider = videoGenerationRegistry.getByProtocol(config.protocol);
+    const provider = getProviderForNodeType(nodeType, config);
     return provider
       ? {
           capabilities: provider.capabilities,

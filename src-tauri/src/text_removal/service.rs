@@ -1,8 +1,10 @@
 // 文字去除服务
 // 整合 Gemini 检测、掩码生成、自适应背景修复的完整流程
 
-use super::gemini_detector::{detect_text, extract_text_styles, GeminiConfig, TextRegion, TextStyleInfo};
 use super::adaptive_inpainter::adaptive_inpaint;
+use super::gemini_detector::{
+    detect_text, extract_text_styles, GeminiConfig, TextRegion, TextStyleInfo,
+};
 
 use base64::{engine::general_purpose::STANDARD, Engine};
 use image::{DynamicImage, ImageFormat};
@@ -196,27 +198,24 @@ pub async fn inpaint_background(_app: AppHandle, params: InpaintParams) -> Inpai
     // 执行自适应修复
     println!("[Rust] 执行自适应背景修复...");
     let rgb_image = img.to_rgb8();
-    let inpainted = match tokio::task::spawn_blocking(move || {
-        adaptive_inpaint(&rgb_image, &regions)
-    })
-    .await
-    {
-        Ok(Ok(result)) => result,
-        Ok(Err(e)) => {
-            return InpaintResult {
-                success: false,
-                background_image: None,
-                error: Some(format!("背景修复失败: {}", e)),
+    let inpainted =
+        match tokio::task::spawn_blocking(move || adaptive_inpaint(&rgb_image, &regions)).await {
+            Ok(Ok(result)) => result,
+            Ok(Err(e)) => {
+                return InpaintResult {
+                    success: false,
+                    background_image: None,
+                    error: Some(format!("背景修复失败: {}", e)),
+                }
             }
-        }
-        Err(e) => {
-            return InpaintResult {
-                success: false,
-                background_image: None,
-                error: Some(format!("背景修复任务失败: {}", e)),
+            Err(e) => {
+                return InpaintResult {
+                    success: false,
+                    background_image: None,
+                    error: Some(format!("背景修复任务失败: {}", e)),
+                }
             }
-        }
-    };
+        };
 
     // 编码结果图片
     let mut output_buffer = Cursor::new(Vec::new());
@@ -314,7 +313,13 @@ pub async fn remove_text_from_image(
     }
 
     // 3. 提取样式信息（失败则回退到默认样式）
-    let styles = match extract_text_styles(&params.image_data, &detection_result.regions, &gemini_config).await {
+    let styles = match extract_text_styles(
+        &params.image_data,
+        &detection_result.regions,
+        &gemini_config,
+    )
+    .await
+    {
         Ok(s) => s,
         Err(e) => {
             println!("[Rust] 样式提取失败，使用默认样式: {}", e);
@@ -334,33 +339,31 @@ pub async fn remove_text_from_image(
     // 4. 执行自适应修复
     println!("[Rust] 执行自适应背景修复...");
     let regions = detection_result.regions.clone();
-    let inpainted = match tokio::task::spawn_blocking(move || {
-        adaptive_inpaint(&rgb_image, &regions)
-    })
-    .await
-    {
-        Ok(Ok(result)) => result,
-        Ok(Err(e)) => {
-            return TextRemovalResult {
-                success: false,
-                background_image: None,
-                text_boxes,
-                error: Some(format!("背景修复失败: {}", e)),
+    let inpainted =
+        match tokio::task::spawn_blocking(move || adaptive_inpaint(&rgb_image, &regions)).await {
+            Ok(Ok(result)) => result,
+            Ok(Err(e)) => {
+                return TextRemovalResult {
+                    success: false,
+                    background_image: None,
+                    text_boxes,
+                    error: Some(format!("背景修复失败: {}", e)),
+                }
             }
-        }
-        Err(e) => {
-            return TextRemovalResult {
-                success: false,
-                background_image: None,
-                text_boxes,
-                error: Some(format!("背景修复任务失败: {}", e)),
+            Err(e) => {
+                return TextRemovalResult {
+                    success: false,
+                    background_image: None,
+                    text_boxes,
+                    error: Some(format!("背景修复任务失败: {}", e)),
+                }
             }
-        }
-    };
+        };
 
     // 4. 编码结果图片
     let mut output_buffer = Cursor::new(Vec::new());
-    if let Err(e) = DynamicImage::ImageRgb8(inpainted).write_to(&mut output_buffer, ImageFormat::Png)
+    if let Err(e) =
+        DynamicImage::ImageRgb8(inpainted).write_to(&mut output_buffer, ImageFormat::Png)
     {
         return TextRemovalResult {
             success: false,
@@ -432,7 +435,8 @@ pub fn build_text_boxes(
                 color = normalize_hex(&style.color_hex);
             }
 
-            let color = color.unwrap_or_else(|| dominant_dark_color(rgb_image, [ymin, xmin, ymax, xmax]));
+            let color =
+                color.unwrap_or_else(|| dominant_dark_color(rgb_image, [ymin, xmin, ymax, xmax]));
 
             TextBoxData {
                 x,
@@ -478,9 +482,13 @@ fn should_merge_regions(r1: &TextRegion, r2: &TextRegion) -> bool {
 
     let (top_min, top_max, top_xmin, top_xmax, bottom_min, bottom_max, bottom_xmin, bottom_xmax) =
         if y1_min <= y2_min {
-            (y1_min, y1_max, x1_min, x1_max, y2_min, y2_max, x2_min, x2_max)
+            (
+                y1_min, y1_max, x1_min, x1_max, y2_min, y2_max, x2_min, x2_max,
+            )
         } else {
-            (y2_min, y2_max, x2_min, x2_max, y1_min, y1_max, x1_min, x1_max)
+            (
+                y2_min, y2_max, x2_min, x2_max, y1_min, y1_max, x1_min, x1_max,
+            )
         };
 
     let h_overlap = calculate_iou_1d(top_xmin, top_xmax, bottom_xmin, bottom_xmax);
@@ -658,7 +666,7 @@ mod tests {
     fn test_build_text_boxes() {
         // box_2d: [ymin, xmin, ymax, xmax] 归一化到 0-1000
         let regions = vec![TextRegion {
-            box_2d: [100, 100, 200, 300],  // ymin=100, xmin=100, ymax=200, xmax=300
+            box_2d: [100, 100, 200, 300], // ymin=100, xmin=100, ymax=200, xmax=300
             label: "测试".to_string(),
             polygon: vec![],
         }];
@@ -666,9 +674,9 @@ mod tests {
         let img = image::RgbImage::new(1000, 1000);
         let converted = build_text_boxes(&regions, &[], 1000, 1000, &img);
         assert_eq!(converted.len(), 1);
-        assert_eq!(converted[0].x, 100.0);      // xmin * 1000 / 1000
-        assert_eq!(converted[0].y, 100.0);      // ymin * 1000 / 1000
-        assert_eq!(converted[0].width, 200.0);  // (xmax - xmin) * 1000 / 1000
+        assert_eq!(converted[0].x, 100.0); // xmin * 1000 / 1000
+        assert_eq!(converted[0].y, 100.0); // ymin * 1000 / 1000
+        assert_eq!(converted[0].width, 200.0); // (xmax - xmin) * 1000 / 1000
         assert_eq!(converted[0].height, 100.0); // (ymax - ymin) * 1000 / 1000
     }
 }

@@ -256,7 +256,7 @@ export const Sidebar = memo(function Sidebar({ onDragStart }: SidebarProps) {
     <>
     <div className="flex h-full flex-shrink-0">
       {/* 最左侧图标导航栏 */}
-      <div className="w-14 flex flex-col items-center py-3 bg-base-200 border-r border-base-300">
+      <div className="nc-sidebar-rail w-14 flex flex-col items-center py-3">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = sidebarView === item.id;
@@ -265,10 +265,10 @@ export const Sidebar = memo(function Sidebar({ onDragStart }: SidebarProps) {
               key={item.id}
               className={`
                 w-10 h-10 flex items-center justify-center rounded-lg mb-2
-                transition-colors tooltip tooltip-right
+                transition-colors tooltip tooltip-right border
                 ${isActive
-                  ? "bg-primary text-primary-content"
-                  : "hover:bg-base-300 text-base-content/70 hover:text-base-content"
+                  ? "bg-primary text-primary-content border-primary shadow-[var(--nc-shadow-card)]"
+                  : "border-transparent hover:border-base-300 hover:bg-base-100 text-base-content/60 hover:text-base-content"
                 }
               `}
               data-tip={item.label}
@@ -281,13 +281,13 @@ export const Sidebar = memo(function Sidebar({ onDragStart }: SidebarProps) {
       </div>
 
       {/* 右侧内容面板 - 固定宽度 */}
-      <div className="w-56 flex flex-col bg-base-100 border-r border-base-300">
+      <div className="nc-sidebar-panel w-60 flex flex-col">
         {/* 画布视图 */}
         {sidebarView === "canvases" && (
           <>
             {/* 头部 */}
             <div className="p-3 border-b border-base-300 flex items-center justify-between">
-              <h3 className="font-semibold text-sm">我的画布</h3>
+              <h3 className="nc-section-title">我的画布</h3>
               <button
                 className="btn btn-ghost btn-xs btn-circle"
                 onClick={handleCreateCanvas}
@@ -316,11 +316,10 @@ export const Sidebar = memo(function Sidebar({ onDragStart }: SidebarProps) {
                     <div
                       key={canvas.id}
                       className={`
-                        group relative flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer
-                        transition-colors
+                        nc-list-item group relative flex items-center gap-2 px-3 py-2 cursor-pointer
                         ${activeCanvasId === canvas.id
-                          ? "bg-primary/10 text-primary"
-                          : "hover:bg-base-200"
+                          ? "nc-list-item-active"
+                          : ""
                         }
                       `}
                       onClick={() => editingId !== canvas.id && switchCanvas(canvas.id)}
@@ -363,7 +362,7 @@ export const Sidebar = memo(function Sidebar({ onDragStart }: SidebarProps) {
                             <div className="text-sm font-medium truncate">
                               {canvas.name}
                             </div>
-                            <div className="text-xs text-base-content/50">
+                            <div className="text-xs nc-muted">
                               {canvas.nodes.length} 个节点
                             </div>
                           </div>
@@ -403,7 +402,7 @@ export const Sidebar = memo(function Sidebar({ onDragStart }: SidebarProps) {
           <>
             {/* 头部 */}
             <div className="p-3 border-b border-base-300">
-              <h3 className="font-semibold text-sm mb-2">节点库</h3>
+              <h3 className="nc-section-title mb-2">节点库</h3>
               <Input
                 isSearch
                 placeholder="搜索节点..."
@@ -417,7 +416,7 @@ export const Sidebar = memo(function Sidebar({ onDragStart }: SidebarProps) {
               {filteredCategories.map((category) => (
                 <div key={category.id} className="mb-2">
                   <button
-                    className="flex items-center gap-2 w-full px-2 py-1.5 text-sm font-medium text-base-content/70 hover:text-base-content hover:bg-base-200 rounded-lg transition-colors"
+                    className="nc-list-item flex items-center gap-2 w-full px-2 py-1.5 text-sm font-semibold text-base-content/70 hover:text-base-content"
                     onClick={() => toggleCategory(category.id)}
                   >
                     <ChevronRight
@@ -447,7 +446,7 @@ export const Sidebar = memo(function Sidebar({ onDragStart }: SidebarProps) {
                           return (
                             <div
                               key={node.type}
-                              className="draggable-node flex items-center gap-2 px-2 py-2 bg-base-200/50 hover:bg-base-200 rounded-lg transition-colors group cursor-grab"
+                              className="draggable-node nc-list-item flex items-center gap-2 px-2 py-2 bg-base-100 hover:bg-base-200 transition-colors group cursor-grab"
                               draggable
                               onDragStart={(e) => onDragStart(e, node.type, node.defaultData)}
                             >
@@ -457,7 +456,7 @@ export const Sidebar = memo(function Sidebar({ onDragStart }: SidebarProps) {
                               </div>
                               <div className="flex-1 min-w-0">
                                 <div className="text-sm font-medium truncate">{node.label}</div>
-                                <div className="text-xs text-base-content/50 truncate">
+                                <div className="text-xs nc-muted truncate">
                                   {node.description}
                                 </div>
                               </div>
@@ -486,7 +485,7 @@ export const Sidebar = memo(function Sidebar({ onDragStart }: SidebarProps) {
             {/* 头部 */}
             <div className="p-3 border-b border-base-300">
               <div className="flex items-center justify-between mb-2">
-                <h3 className="font-semibold text-sm">提示词库</h3>
+                <h3 className="nc-section-title">提示词库</h3>
                 <button
                   className="btn btn-ghost btn-xs gap-1"
                   onClick={() => {
@@ -550,7 +549,7 @@ export const Sidebar = memo(function Sidebar({ onDragStart }: SidebarProps) {
               {userPrompts.length > 0 && (
                 <div className="mb-2">
                   <button
-                    className="flex items-center gap-2 w-full px-2 py-1.5 text-sm font-medium text-base-content/70 hover:text-base-content hover:bg-base-200 rounded-lg transition-colors"
+                    className="nc-list-item flex items-center gap-2 w-full px-2 py-1.5 text-sm font-semibold text-base-content/70 hover:text-base-content"
                     onClick={() => setIsUserPromptsExpanded(!isUserPromptsExpanded)}
                   >
                     <ChevronRight
@@ -584,7 +583,7 @@ export const Sidebar = memo(function Sidebar({ onDragStart }: SidebarProps) {
                           .map((userPrompt) => (
                             <div
                               key={userPrompt.id}
-                              className="draggable-prompt relative flex items-start gap-2 px-2 py-2 bg-base-200/50 hover:bg-base-200 rounded-lg transition-colors group cursor-grab"
+                              className="draggable-prompt nc-list-item relative flex items-start gap-2 px-2 py-2 bg-base-100 hover:bg-base-200 transition-colors group cursor-grab"
                               draggable
                               onDragStart={(e) => {
                                 e.dataTransfer.setData(
@@ -600,7 +599,7 @@ export const Sidebar = memo(function Sidebar({ onDragStart }: SidebarProps) {
                               <GripVertical className="w-3 h-3 mt-1 text-base-content/30 group-hover:text-base-content/50 flex-shrink-0" />
                               <div className="flex-1 min-w-0">
                                 <div className="text-sm font-medium truncate">{userPrompt.title}</div>
-                                <div className="text-xs text-base-content/50 truncate">
+                                <div className="text-xs nc-muted truncate">
                                   {userPrompt.description || userPrompt.prompt.slice(0, 50)}
                                 </div>
                               </div>
@@ -663,7 +662,7 @@ export const Sidebar = memo(function Sidebar({ onDragStart }: SidebarProps) {
               {favoritePrompts.length > 0 && (
                 <div className="mb-2">
                   <button
-                    className="flex items-center gap-2 w-full px-2 py-1.5 text-sm font-medium text-base-content/70 hover:text-base-content hover:bg-base-200 rounded-lg transition-colors"
+                    className="nc-list-item flex items-center gap-2 w-full px-2 py-1.5 text-sm font-semibold text-base-content/70 hover:text-base-content"
                     onClick={() => setIsFavoritesExpanded(!isFavoritesExpanded)}
                   >
                     <ChevronRight
@@ -697,7 +696,7 @@ export const Sidebar = memo(function Sidebar({ onDragStart }: SidebarProps) {
                           .map((prompt) => (
                             <div
                               key={prompt.id}
-                              className="draggable-prompt relative flex items-start gap-2 px-2 py-2 bg-base-200/50 hover:bg-base-200 rounded-lg transition-colors group cursor-grab"
+                              className="draggable-prompt nc-list-item relative flex items-start gap-2 px-2 py-2 bg-base-100 hover:bg-base-200 transition-colors group cursor-grab"
                               draggable
                               onDragStart={(e) => {
                                 e.dataTransfer.setData(
@@ -713,7 +712,7 @@ export const Sidebar = memo(function Sidebar({ onDragStart }: SidebarProps) {
                               <GripVertical className="w-3 h-3 mt-1 text-base-content/30 group-hover:text-base-content/50 flex-shrink-0" />
                               <div className="flex-1 min-w-0">
                                 <div className="text-sm font-medium truncate">{prompt.title}</div>
-                                <div className="text-xs text-base-content/50 truncate">
+                                <div className="text-xs nc-muted truncate">
                                   {prompt.description}
                                 </div>
                               </div>
@@ -756,7 +755,7 @@ export const Sidebar = memo(function Sidebar({ onDragStart }: SidebarProps) {
                 return (
                   <div key={category.id} className="mb-2">
                     <button
-                      className="flex items-center gap-2 w-full px-2 py-1.5 text-sm font-medium text-base-content/70 hover:text-base-content hover:bg-base-200 rounded-lg transition-colors"
+                      className="nc-list-item flex items-center gap-2 w-full px-2 py-1.5 text-sm font-semibold text-base-content/70 hover:text-base-content"
                       onClick={() => togglePromptCategory(category.id)}
                     >
                       <ChevronRight
@@ -786,7 +785,7 @@ export const Sidebar = memo(function Sidebar({ onDragStart }: SidebarProps) {
                           {category.prompts.map((prompt) => (
                             <div
                               key={prompt.id}
-                              className="draggable-prompt flex items-start gap-2 px-2 py-2 bg-base-200/50 hover:bg-base-200 rounded-lg transition-colors group cursor-grab"
+                              className="draggable-prompt nc-list-item flex items-start gap-2 px-2 py-2 bg-base-100 hover:bg-base-200 transition-colors group cursor-grab"
                               draggable
                               onDragStart={(e) => {
                                 // 设置提示词模板数据
@@ -803,7 +802,7 @@ export const Sidebar = memo(function Sidebar({ onDragStart }: SidebarProps) {
                               <GripVertical className="w-3 h-3 mt-1 text-base-content/30 group-hover:text-base-content/50 flex-shrink-0" />
                               <div className="flex-1 min-w-0">
                                 <div className="text-sm font-medium truncate">{prompt.title}</div>
-                                <div className="text-xs text-base-content/50 truncate">
+                                <div className="text-xs nc-muted truncate">
                                   {prompt.description}
                                 </div>
                               </div>
@@ -841,7 +840,7 @@ export const Sidebar = memo(function Sidebar({ onDragStart }: SidebarProps) {
     {/* Portal: 画布上下文菜单 */}
     {menuOpenId && menuPosition && menuCanvas && createPortal(
       <ul
-        className="canvas-context-menu menu bg-base-100 rounded-box w-32 p-1 shadow-lg border border-base-300 fixed z-[9999]"
+        className="canvas-context-menu menu nc-panel rounded-lg w-32 p-1 fixed z-[9999]"
         style={{ top: menuPosition.top, left: menuPosition.left }}
       >
         <li>

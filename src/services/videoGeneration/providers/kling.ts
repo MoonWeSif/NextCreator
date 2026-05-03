@@ -9,6 +9,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   VideoGenerationProvider,
+  VideoGenerationRequest,
   VideoTaskResponse,
   VideoProviderConfig,
   VideoGenerationCapability,
@@ -135,20 +136,21 @@ export class KlingVideoProvider implements VideoGenerationProvider {
   /**
    * 验证请求参数
    */
-  validateRequest(request: KlingGenerationRequest): {
+  validateRequest(request: VideoGenerationRequest | KlingGenerationRequest): {
     valid: boolean;
     error?: string;
   } {
+    const klingRequest = this.toKlingRequest(request);
     if (!request.prompt?.trim()) {
       return { valid: false, error: "提示词不能为空" };
     }
 
-    if (!request.model) {
+    if (!klingRequest.model) {
       return { valid: false, error: "请选择模型" };
     }
 
     // 图生视频模式需要图片
-    if (request.mode === "image2video" && !request.image) {
+    if (klingRequest.mode === "image2video" && !klingRequest.image) {
       return { valid: false, error: "图生视频模式需要提供图片" };
     }
 
@@ -159,53 +161,54 @@ export class KlingVideoProvider implements VideoGenerationProvider {
    * 构建 Tauri 后端请求参数
    */
   buildTauriParams(
-    request: KlingGenerationRequest,
+    request: VideoGenerationRequest | KlingGenerationRequest,
     config: VideoProviderConfig
   ): TauriKlingCreateParams {
+    const klingRequest = this.toKlingRequest(request);
     const params: TauriKlingCreateParams = {
       baseUrl: config.baseUrl.replace(/\/+$/, ""),
       apiKey: config.apiKey,
-      model: request.model,
-      prompt: request.prompt,
-      mode: request.mode,
+      model: klingRequest.model,
+      prompt: klingRequest.prompt,
+      mode: klingRequest.mode,
     };
 
     // 添加图片（图生视频模式）
-    if (request.image) {
-      params.image = request.image;
+    if (klingRequest.image) {
+      params.image = klingRequest.image;
     }
 
     // 添加可选参数
-    if (request.duration !== undefined) {
-      params.duration = request.duration;
+    if (klingRequest.duration !== undefined) {
+      params.duration = klingRequest.duration;
     }
-    if (request.width !== undefined) {
-      params.width = request.width;
+    if (klingRequest.width !== undefined) {
+      params.width = klingRequest.width;
     }
-    if (request.height !== undefined) {
-      params.height = request.height;
+    if (klingRequest.height !== undefined) {
+      params.height = klingRequest.height;
     }
-    if (request.fps !== undefined) {
-      params.fps = request.fps;
+    if (klingRequest.fps !== undefined) {
+      params.fps = klingRequest.fps;
     }
-    if (request.seed !== undefined) {
-      params.seed = request.seed;
+    if (klingRequest.seed !== undefined) {
+      params.seed = klingRequest.seed;
     }
-    if (request.n !== undefined) {
-      params.n = request.n;
+    if (klingRequest.n !== undefined) {
+      params.n = klingRequest.n;
     }
 
     // 添加 metadata
-    if (request.metadata) {
+    if (klingRequest.metadata) {
       params.metadata = {};
-      if (request.metadata.negativePrompt) {
-        params.metadata.negative_prompt = request.metadata.negativePrompt;
+      if (klingRequest.metadata.negativePrompt) {
+        params.metadata.negative_prompt = klingRequest.metadata.negativePrompt;
       }
-      if (request.metadata.style) {
-        params.metadata.style = request.metadata.style;
+      if (klingRequest.metadata.style) {
+        params.metadata.style = klingRequest.metadata.style;
       }
-      if (request.metadata.qualityLevel) {
-        params.metadata.quality_level = request.metadata.qualityLevel;
+      if (klingRequest.metadata.qualityLevel) {
+        params.metadata.quality_level = klingRequest.metadata.qualityLevel;
       }
     }
 
@@ -216,10 +219,11 @@ export class KlingVideoProvider implements VideoGenerationProvider {
    * 创建视频生成任务
    */
   async createTask(
-    request: KlingGenerationRequest,
+    request: VideoGenerationRequest | KlingGenerationRequest,
     config: VideoProviderConfig,
     abortSignal?: AbortSignal
   ): Promise<VideoTaskResponse> {
+    const klingRequest = this.toKlingRequest(request);
     // 验证请求
     const validation = this.validateRequest(request);
     if (!validation.valid) {
@@ -233,7 +237,7 @@ export class KlingVideoProvider implements VideoGenerationProvider {
 
     try {
       const params = this.buildTauriParams(request, config);
-      const endpoint = request.mode === "image2video" ? "image2video" : "text2video";
+      const endpoint = klingRequest.mode === "image2video" ? "image2video" : "text2video";
       const fullRequestUrl = `${config.baseUrl}/kling/v1/videos/${endpoint}`;
 
       console.log("[KlingProvider] Creating video task via Tauri backend...");
@@ -267,8 +271,8 @@ export class KlingVideoProvider implements VideoGenerationProvider {
             requestBody: {
               model: request.model,
               prompt: request.prompt.slice(0, 500),
-              mode: request.mode,
-              hasImage: !!request.image,
+              mode: klingRequest.mode,
+              hasImage: !!klingRequest.image,
             },
           }),
         };
@@ -287,15 +291,34 @@ export class KlingVideoProvider implements VideoGenerationProvider {
         errorDetails: this.buildErrorDetails(error, {
           model: request.model,
           provider: config.name,
-          requestUrl: `${config.baseUrl}/kling/v1/videos/${request.mode}`,
+          requestUrl: `${config.baseUrl}/kling/v1/videos/${klingRequest.mode}`,
           requestBody: {
             model: request.model,
             prompt: request.prompt.slice(0, 500),
-            mode: request.mode,
+            mode: klingRequest.mode,
           },
         }),
       };
     }
+  }
+
+  private toKlingRequest(request: VideoGenerationRequest | KlingGenerationRequest): KlingGenerationRequest {
+    const maybeKling = request as Partial<KlingGenerationRequest>;
+    const maybeGeneric = request as Partial<VideoGenerationRequest>;
+    const image = maybeKling.image || maybeGeneric.inputImage;
+    return {
+      prompt: request.prompt,
+      model: request.model,
+      mode: maybeKling.mode || (image ? "image2video" : "text2video"),
+      image,
+      duration: request.duration,
+      width: request.width,
+      height: request.height,
+      fps: request.fps,
+      seed: request.seed,
+      n: request.n,
+      metadata: maybeKling.metadata as KlingMetadata | undefined,
+    };
   }
 
   /**

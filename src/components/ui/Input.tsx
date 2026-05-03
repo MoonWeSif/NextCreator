@@ -34,10 +34,10 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           ref={ref}
           type={inputType}
           className={`
-            w-full h-8 px-3 text-sm rounded-lg
-            bg-base-200/50 border border-base-300/60
+            w-full h-8 px-3 text-sm rounded
+            bg-base-100 border border-base-300
             placeholder:text-base-content/30
-            hover:bg-base-200 hover:border-base-300
+            hover:bg-base-100 hover:border-base-content/20
             focus:bg-base-100 focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/20
             transition-all duration-200
             ${LeftIconComponent ? "pl-9" : ""}

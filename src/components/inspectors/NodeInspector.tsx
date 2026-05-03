@@ -1,8 +1,10 @@
 import { X, Settings2, CircleAlert } from "lucide-react";
 import { ImageGeneratorInspector } from "@/components/inspectors/ImageGeneratorInspector";
+import { LLMContentInspector } from "@/components/inspectors/LLMContentInspector";
+import { VideoGeneratorInspector } from "@/components/inspectors/VideoGeneratorInspector";
 import { nodeCategories, nodeIconMap, nodeIconColors } from "@/config/nodeConfig";
 import { useFlowStore } from "@/stores/flowStore";
-import type { CustomNode, CustomNodeData, ImageGeneratorNodeData } from "@/types";
+import type { CustomNode, CustomNodeData, ImageGeneratorNodeData, LLMContentNodeData, VideoGeneratorNodeData } from "@/types";
 
 function findNodeDefinition(type?: string) {
   if (!type) return undefined;
@@ -29,7 +31,7 @@ function GenericInspector({ node }: { node: CustomNode }) {
   const error = getError(node.data);
 
   return (
-    <div className="p-4 space-y-4 overflow-y-auto">
+    <div className="min-h-0 flex-1 overflow-y-auto p-4 space-y-4">
       <div>
         <label className="text-xs text-base-content/60 mb-1 block">名称</label>
         <input
@@ -76,9 +78,9 @@ export function NodeInspector() {
   const title = String(selectedNode.data.label || definition?.label || "节点");
 
   return (
-    <aside className="w-[360px] min-w-[360px] h-full bg-base-100 border-l border-base-300 flex flex-col shadow-xl z-10">
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-base-300">
-        <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${iconColor}`}>
+    <aside className="w-[360px] min-w-[360px] h-full min-h-0 bg-base-100 border-l border-base-300 flex flex-col shadow-[var(--nc-shadow-card)] z-10">
+      <div className="flex flex-shrink-0 items-center gap-3 px-4 py-3 border-b border-base-300">
+        <div className={`w-9 h-9 rounded-lg flex items-center justify-center shadow-[inset_0_0_0_1px_var(--nc-border)] ${iconColor}`}>
           <Icon className="w-4 h-4" />
         </div>
         <div className="min-w-0 flex-1">
@@ -95,14 +97,26 @@ export function NodeInspector() {
         </button>
       </div>
 
-      {selectedNode.type === "imageGeneratorNode" ? (
-        <ImageGeneratorInspector
-          nodeId={selectedNode.id}
-          data={selectedNode.data as ImageGeneratorNodeData}
-        />
-      ) : (
-        <GenericInspector node={selectedNode} />
-      )}
+      <div className="min-h-0 flex-1">
+        {selectedNode.type === "imageGeneratorNode" ? (
+          <ImageGeneratorInspector
+            nodeId={selectedNode.id}
+            data={selectedNode.data as ImageGeneratorNodeData}
+          />
+        ) : selectedNode.type === "videoGeneratorNode" ? (
+          <VideoGeneratorInspector
+            nodeId={selectedNode.id}
+            data={selectedNode.data as VideoGeneratorNodeData}
+          />
+        ) : selectedNode.type === "llmContentNode" ? (
+          <LLMContentInspector
+            nodeId={selectedNode.id}
+            data={selectedNode.data as LLMContentNodeData}
+          />
+        ) : (
+          <GenericInspector node={selectedNode} />
+        )}
+      </div>
     </aside>
   );
 }

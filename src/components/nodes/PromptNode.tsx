@@ -39,19 +39,21 @@ export const PromptNode = memo(({ id, data, selected }: NodeProps<PromptNode>) =
     <>
       <div
         className={`
-          min-w-[280px] max-w-[320px] rounded-xl bg-base-100 shadow-lg border-2 transition-all
-          ${selected ? "border-primary shadow-primary/20" : "border-base-300"}
+          nc-node-card nc-node-accent-blue min-w-[280px] max-w-[320px] transition-all
+          ${selected ? "nc-node-card-selected" : ""}
         `}
       >
         {/* 节点头部 */}
-        <div className="flex items-center justify-between px-3 py-2 bg-gradient-to-r from-blue-500 to-blue-600 rounded-t-lg">
+        <div className="nc-node-header nc-node-header-accent">
           <div className="flex items-center gap-2">
-            <MessageSquare className="w-4 h-4 text-white" />
-            <span className="text-sm font-medium text-white">{data.label}</span>
+            <span className="nc-node-header-icon">
+              <MessageSquare className="w-4 h-4" />
+            </span>
+            <span className="text-sm font-semibold truncate">{data.label}</span>
           </div>
           {/* 编辑按钮 */}
           <button
-            className="btn btn-circle btn-ghost btn-xs text-white hover:bg-white/20 nodrag"
+            className="btn btn-circle btn-ghost btn-xs nodrag"
             onClick={handleOpenModal}
             title="编辑提示词"
           >
@@ -67,7 +69,7 @@ export const PromptNode = memo(({ id, data, selected }: NodeProps<PromptNode>) =
           <div
             className={`
               min-h-[60px] max-h-[100px] overflow-hidden rounded-lg p-2.5
-              bg-base-200/50 border border-base-300
+              nc-soft-surface
               group-hover:border-primary/50 group-hover:bg-base-200
               transition-colors text-sm
             `}

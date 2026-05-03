@@ -8,6 +8,8 @@ use std::time::Duration;
 pub struct GeminiRequest {
     pub contents: Vec<Content>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub system_instruction: Option<Content>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub generation_config: Option<GenerationConfig>,
 }
 
@@ -132,6 +134,7 @@ pub async fn gemini_generate_content(params: GeminiRequestParams) -> GeminiResul
 
     let request_body = GeminiRequest {
         contents: vec![Content { parts }],
+        system_instruction: None,
         generation_config: Some(GenerationConfig {
             response_modalities: Some(vec!["IMAGE".to_string()]),
             image_config: Some(ImageConfig {
@@ -341,6 +344,7 @@ pub struct LLMRequestParams {
     pub temperature: Option<f64>,
     pub max_tokens: Option<i32>,
     pub files: Option<Vec<FileData>>, // 文件数据（PDF、图片等）
+    pub response_format: Option<String>, // "text", "json_object" or "json_schema"
     pub response_json_schema: Option<serde_json::Value>, // 结构化输出的 JSON Schema
 }
 
@@ -358,6 +362,8 @@ pub struct LLMResult {
 #[serde(rename_all = "camelCase")]
 pub struct LLMRequest {
     pub contents: Vec<Content>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub system_instruction: Option<Content>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub generation_config: Option<LLMGenerationConfig>,
 }
@@ -386,19 +392,22 @@ pub async fn gemini_generate_text(params: LLMRequestParams) -> LLMResult {
         params.files.as_ref().map(|v| v.len()).unwrap_or(0)
     );
 
-    // 构建请求内容
-    let prompt_text = if let Some(system_prompt) = &params.system_prompt {
-        if !system_prompt.is_empty() {
-            format!("系统指令：{}\n\n用户请求：{}", system_prompt, params.prompt)
+    let system_instruction = params.system_prompt.as_ref().and_then(|system_prompt| {
+        if system_prompt.trim().is_empty() {
+            None
         } else {
-            params.prompt.clone()
+            Some(Content {
+                parts: vec![Part::Text {
+                    text: system_prompt.clone(),
+                }],
+            })
         }
-    } else {
-        params.prompt.clone()
-    };
+    });
 
     // 构建 parts：先添加文本，再添加文件
-    let mut parts: Vec<Part> = vec![Part::Text { text: prompt_text }];
+    let mut parts: Vec<Part> = vec![Part::Text {
+        text: params.prompt.clone(),
+    }];
 
     // 添加文件（PDF、图片等）
     if let Some(files) = &params.files {
@@ -419,9 +428,12 @@ pub async fn gemini_generate_text(params: LLMRequestParams) -> LLMResult {
 
     let request_body = LLMRequest {
         contents: vec![Content { parts }],
+        system_instruction,
         generation_config: Some(LLMGenerationConfig {
             response_mime_type: if params.response_json_schema.is_some()
                 || params.output_format.as_deref() == Some("json")
+                || params.response_format.as_deref() == Some("json_object")
+                || params.response_format.as_deref() == Some("json_schema")
             {
                 Some("application/json".to_string())
             } else {

@@ -2,16 +2,6 @@ import type { Node } from "@xyflow/react";
 import type { ErrorDetails, ModelType, NodeProviderMapping } from "@/types";
 import type { ImageGenerationRequest } from "@/services/imageGeneration";
 
-export type ImageGeneratorEngine =
-  | "nanobanana-pro"
-  | "nanobanana2"
-  | "nanobanana"
-  | "dalle"
-  | "flux"
-  | "gpt-image"
-  | "doubao"
-  | "z-image";
-
 export type ImageNodeProviderKey = Extract<
   keyof NodeProviderMapping,
   | "imageGeneratorPro"
@@ -26,12 +16,43 @@ export type ImageNodeProviderKey = Extract<
 
 export type GptImageSize = "auto" | `${number}x${number}`;
 export type GptImageSizeMode = "preset" | "custom";
+export type ImageApiProtocol = "gemini-generate-content" | "openai-images";
+export type OpenAIImageOutputFormat = "png" | "jpeg" | "webp";
+export type OpenAIImageInputFidelity = "auto" | "low" | "high";
+
+export interface ImageGeneratorRunRecord {
+  id: string;
+  startedAt: number;
+  finishedAt?: number;
+  status: "loading" | "success" | "error";
+  protocol: ImageApiProtocol;
+  protocolLabel: string;
+  model: string;
+  modelLabel: string;
+  operation: "generate" | "edit";
+  input: {
+    prompt: string;
+    imageCount: number;
+    imageLabels?: string[];
+    request: ImageGenerationRequest;
+  };
+  output?: {
+    text?: string;
+    metadata?: ImageGenerationRequest | Record<string, unknown>;
+    imagePaths?: string[];
+    imageDataList?: string[];
+  };
+  durationMs?: number;
+  error?: string;
+  errorDetails?: ErrorDetails;
+}
 
 export interface ImageGeneratorNodeData {
   [key: string]: unknown;
   label: string;
-  engine: ImageGeneratorEngine;
+  apiProtocol?: ImageApiProtocol;
   model: ModelType;
+  prompt?: string;
   aspectRatio?: string;
   imageSize?: string;
   size?: GptImageSize;
@@ -40,23 +61,25 @@ export interface ImageGeneratorNodeData {
   customHeight?: number;
   quality?: "auto" | "standard" | "hd" | "low" | "medium" | "high";
   background?: "auto" | "transparent" | "opaque";
-  outputFormat?: "png" | "jpeg" | "webp";
+  outputFormat?: OpenAIImageOutputFormat;
   outputCompression?: number;
   moderation?: "auto" | "low";
-  guidanceScale?: number;
-  watermark?: boolean;
-  negativePrompt?: string;
+  inputFidelity?: OpenAIImageInputFidelity;
+  n?: number;
   status: "idle" | "loading" | "success" | "error";
   outputImage?: string;
   outputImagePath?: string;
+  outputImages?: string[];
+  outputImagePaths?: string[];
   error?: string;
   errorDetails?: ErrorDetails;
+  runRecords?: ImageGeneratorRunRecord[];
 }
 
 export type ImageGeneratorNode = Node<ImageGeneratorNodeData>;
 
-export interface ImageEngineConfig {
-  engine: ImageGeneratorEngine;
+export interface ImageApiProtocolConfig {
+  protocol: ImageApiProtocol;
   providerKey: ImageNodeProviderKey;
   label: string;
   shortLabel: string;
@@ -66,20 +89,14 @@ export interface ImageEngineConfig {
   aspectRatios?: Array<{ value: string; label: string }>;
   imageSizes?: Array<{ value: string; label: string }>;
   accent: "primary" | "info" | "warning" | "secondary" | "error";
-  headerClass: string;
-  badgeClass: string;
   outputHandleClass: string;
   supportsImageInput: boolean;
   supportsMultipleImages: boolean;
-  hasImageSize?: boolean;
-  hasDalleQuality?: boolean;
-  hasGptImageControls?: boolean;
-  hasGuidanceScale?: boolean;
-  hasWatermark?: boolean;
-  hasNegativePrompt?: boolean;
+  hasGeminiImageControls?: boolean;
+  hasOpenAIImageControls?: boolean;
 }
 
-const basicAspectRatioOptions = [
+export const basicAspectRatioOptions = [
   { value: "1:1", label: "1:1" },
   { value: "16:9", label: "16:9" },
   { value: "9:16", label: "9:16" },
@@ -87,7 +104,7 @@ const basicAspectRatioOptions = [
   { value: "3:4", label: "3:4" },
 ];
 
-const proAspectRatioOptions = [
+export const proAspectRatioOptions = [
   ...basicAspectRatioOptions,
   { value: "3:2", label: "3:2" },
   { value: "2:3", label: "2:3" },
@@ -96,7 +113,7 @@ const proAspectRatioOptions = [
   { value: "21:9", label: "21:9" },
 ];
 
-const nb2AspectRatioOptions = [
+export const nb2AspectRatioOptions = [
   ...proAspectRatioOptions,
   { value: "1:4", label: "1:4" },
   { value: "4:1", label: "4:1" },
@@ -118,8 +135,6 @@ export const nb2ImageSizeOptions = [
 export const gptImagePresetModels = [
   { value: "gpt-image-2", label: "GPT Image 2" },
   { value: "gpt-image-1.5", label: "GPT Image 1.5" },
-  { value: "gpt-image-1", label: "GPT Image 1" },
-  { value: "gpt-image-1-mini", label: "GPT Image Mini" },
 ];
 
 export const gptImageQualityOptions = [
@@ -129,12 +144,7 @@ export const gptImageQualityOptions = [
   { value: "high", label: "高" },
 ] as const;
 
-export const dalleQualityOptions = [
-  { value: "standard", label: "标准" },
-  { value: "hd", label: "高清" },
-] as const;
-
-export const gptImageSizePresetOptions: Array<{ value: GptImageSize | "custom"; label: string }> = [
+export const gptImage2SizePresetOptions: Array<{ value: GptImageSize | "custom"; label: string }> = [
   { value: "auto", label: "自动" },
   { value: "1024x1024", label: "1:1 1024" },
   { value: "2048x2048", label: "1:1 2048" },
@@ -156,6 +166,13 @@ export const gptImageSizePresetOptions: Array<{ value: GptImageSize | "custom"; 
   { value: "custom", label: "自定义" },
 ];
 
+export const gptImageFixedSizeOptions: Array<{ value: GptImageSize; label: string }> = [
+  { value: "auto", label: "自动" },
+  { value: "1024x1024", label: "1:1 1024" },
+  { value: "1536x1024", label: "3:2 1536" },
+  { value: "1024x1536", label: "2:3 1536" },
+];
+
 export const gptImageBackgroundOptions = [
   { value: "auto", label: "自动" },
   { value: "transparent", label: "透明" },
@@ -173,191 +190,108 @@ export const gptImageModerationOptions = [
   { value: "low", label: "宽松" },
 ] as const;
 
-export const imageEngineConfigs: Record<ImageGeneratorEngine, ImageEngineConfig> = {
-  "nanobanana-pro": {
-    engine: "nanobanana-pro",
-    providerKey: "imageGeneratorPro",
-    label: "NanoBanana Pro",
-    shortLabel: "NB Pro",
-    description: "高质量生成，支持 4K 分辨率",
-    defaultModel: "gemini-3-pro-image-preview",
-    presetModels: [{ value: "gemini-3-pro-image-preview", label: "NanoBanana Pro" }],
-    aspectRatios: proAspectRatioOptions,
-    imageSizes: imageSizeOptions,
-    accent: "primary",
-    headerClass: "bg-gradient-to-r from-purple-500 to-pink-500",
-    badgeClass: "bg-purple-500/10 text-purple-600",
-    outputHandleClass: "!bg-pink-500",
-    supportsImageInput: true,
-    supportsMultipleImages: true,
-    hasImageSize: true,
-  },
-  nanobanana2: {
-    engine: "nanobanana2",
+export const gptImageInputFidelityOptions = [
+  { value: "auto", label: "默认" },
+  { value: "low", label: "低" },
+  { value: "high", label: "高" },
+] as const;
+
+export const openAIImageCountOptions = [
+  { value: "1", label: "1 张" },
+  { value: "2", label: "2 张" },
+  { value: "3", label: "3 张" },
+  { value: "4", label: "4 张" },
+] as const;
+
+export const geminiImagePresetModels = [
+  { value: "gemini-3.1-flash-image-preview", label: "Gemini 3.1 Flash Image / NanoBanana 2" },
+  { value: "gemini-3-pro-image-preview", label: "Gemini 3 Pro Image / NanoBanana Pro" },
+  { value: "gemini-2.5-flash-image", label: "Gemini 2.5 Flash Image / NanoBanana" },
+];
+
+export const imageApiProtocolConfigs: Record<ImageApiProtocol, ImageApiProtocolConfig> = {
+  "gemini-generate-content": {
+    protocol: "gemini-generate-content",
     providerKey: "imageGeneratorNB2",
-    label: "NanoBanana2",
-    shortLabel: "NB2",
-    description: "推荐首选，性能/成本/延迟最佳平衡",
+    label: "Gemini generateContent",
+    shortLabel: "Gemini",
+    description: "Google Gemini 原生 /v1beta/models/{model}:generateContent 图片协议",
     defaultModel: "gemini-3.1-flash-image-preview",
-    presetModels: [{ value: "gemini-3.1-flash-image-preview", label: "NanoBanana2" }],
+    presetModels: geminiImagePresetModels,
     aspectRatios: nb2AspectRatioOptions,
     imageSizes: nb2ImageSizeOptions,
     accent: "info",
-    headerClass: "bg-gradient-to-r from-cyan-500 to-blue-500",
-    badgeClass: "bg-cyan-500/10 text-cyan-600",
     outputHandleClass: "!bg-blue-500",
     supportsImageInput: true,
     supportsMultipleImages: true,
-    hasImageSize: true,
+    hasGeminiImageControls: true,
   },
-  nanobanana: {
-    engine: "nanobanana",
-    providerKey: "imageGeneratorFast",
-    label: "NanoBanana",
-    shortLabel: "NB",
-    description: "快速生成，适合批量任务",
-    defaultModel: "gemini-2.5-flash-image",
-    presetModels: [{ value: "gemini-2.5-flash-image", label: "NanoBanana" }],
-    aspectRatios: basicAspectRatioOptions,
-    accent: "warning",
-    headerClass: "bg-gradient-to-r from-amber-500 to-orange-500",
-    badgeClass: "bg-amber-500/10 text-amber-600",
-    outputHandleClass: "!bg-orange-500",
-    supportsImageInput: true,
-    supportsMultipleImages: true,
-  },
-  dalle: {
-    engine: "dalle",
-    providerKey: "dalleGenerator",
-    label: "DALL-E",
-    shortLabel: "DALL-E",
-    description: "OpenAI DALL-E 图片生成",
-    defaultModel: "dall-e-3",
-    presetModels: [
-      { value: "dall-e-3", label: "DALL-E 3" },
-      { value: "dall-e-2", label: "DALL-E 2" },
-    ],
-    aspectRatios: [
-      { value: "1:1", label: "1:1" },
-      { value: "16:9", label: "16:9" },
-      { value: "9:16", label: "9:16" },
-    ],
-    accent: "secondary",
-    headerClass: "bg-gradient-to-r from-pink-500 to-rose-500",
-    badgeClass: "bg-pink-500/10 text-pink-600",
-    outputHandleClass: "!bg-pink-500",
-    supportsImageInput: true,
-    supportsMultipleImages: false,
-    hasDalleQuality: true,
-  },
-  flux: {
-    engine: "flux",
-    providerKey: "fluxGenerator",
-    label: "Flux",
-    shortLabel: "Flux",
-    description: "Flux 图片生成",
-    defaultModel: "flux-1-pro",
-    presetModels: [
-      { value: "flux-1-pro", label: "Flux 1 Pro" },
-      { value: "flux-1.1-pro", label: "Flux 1.1 Pro" },
-      { value: "flux-1-dev", label: "Flux 1 Dev" },
-      { value: "flux-1-schnell", label: "Flux 1 Schnell" },
-    ],
-    aspectRatios: basicAspectRatioOptions,
-    accent: "primary",
-    headerClass: "bg-gradient-to-r from-violet-500 to-purple-500",
-    badgeClass: "bg-violet-500/10 text-violet-600",
-    outputHandleClass: "!bg-violet-500",
-    supportsImageInput: true,
-    supportsMultipleImages: false,
-  },
-  "gpt-image": {
-    engine: "gpt-image",
+  "openai-images": {
+    protocol: "openai-images",
     providerKey: "gptImageGenerator",
-    label: "GPT Image",
-    shortLabel: "GPT",
-    description: "OpenAI GPT Image 图片生成和编辑",
+    label: "OpenAI Images API",
+    shortLabel: "Images",
+    description: "OpenAI /v1/images/generations 与 /v1/images/edits 图片协议",
     defaultModel: "gpt-image-2",
     presetModels: gptImagePresetModels,
     accent: "primary",
-    headerClass: "bg-gradient-to-r from-lime-500 to-green-500",
-    badgeClass: "bg-lime-500/10 text-lime-700",
     outputHandleClass: "!bg-lime-500",
     supportsImageInput: true,
     supportsMultipleImages: true,
-    hasGptImageControls: true,
-  },
-  doubao: {
-    engine: "doubao",
-    providerKey: "doubaoGenerator",
-    label: "豆包",
-    shortLabel: "豆包",
-    description: "字节跳动豆包图片生成",
-    defaultModel: "doubao-seedream-3-0-t2i-250415",
-    presetModels: [
-      { value: "doubao-seedream-3-0-t2i-250415", label: "Seedream 3.0" },
-      { value: "doubao-seedream-4-0-250828", label: "Seedream 4.0" },
-    ],
-    aspectRatios: basicAspectRatioOptions,
-    accent: "info",
-    headerClass: "bg-gradient-to-r from-cyan-500 to-teal-500",
-    badgeClass: "bg-cyan-500/10 text-cyan-600",
-    outputHandleClass: "!bg-cyan-500",
-    supportsImageInput: true,
-    supportsMultipleImages: true,
-    hasGuidanceScale: true,
-    hasWatermark: true,
-  },
-  "z-image": {
-    engine: "z-image",
-    providerKey: "zImageGenerator",
-    label: "Z-Image",
-    shortLabel: "Z",
-    description: "Gitee AI Z-Image 图片生成",
-    defaultModel: "z-image-turbo",
-    presetModels: [
-      { value: "z-image-turbo", label: "Z-Image Turbo" },
-    ],
-    aspectRatios: basicAspectRatioOptions,
-    accent: "primary",
-    headerClass: "bg-gradient-to-r from-indigo-500 to-blue-500",
-    badgeClass: "bg-indigo-500/10 text-indigo-600",
-    outputHandleClass: "!bg-indigo-500",
-    supportsImageInput: false,
-    supportsMultipleImages: false,
-    hasNegativePrompt: true,
+    hasOpenAIImageControls: true,
   },
 };
 
-export const imageEngineOptions = Object.values(imageEngineConfigs).map((config) => ({
-  value: config.engine,
+export const imageApiProtocolOptions = Object.values(imageApiProtocolConfigs).map((config) => ({
+  value: config.protocol,
   label: config.label,
   description: config.description,
 }));
 
-export const defaultImageEngine: ImageGeneratorEngine = "nanobanana2";
+export const defaultImageApiProtocol: ImageApiProtocol = "gemini-generate-content";
 
-export function getImageEngineConfig(engine?: unknown): ImageEngineConfig {
-  return imageEngineConfigs[(engine as ImageGeneratorEngine) || defaultImageEngine] || imageEngineConfigs[defaultImageEngine];
+export function getImageApiProtocolFromEngine(engine?: unknown): ImageApiProtocol {
+  if (engine === "gpt-image" || engine === "dalle" || engine === "flux" || engine === "doubao" || engine === "z-image") {
+    return "openai-images";
+  }
+
+  return "gemini-generate-content";
 }
 
-export function getDefaultImageGeneratorData(engine: ImageGeneratorEngine = defaultImageEngine): ImageGeneratorNodeData {
-  const config = getImageEngineConfig(engine);
+export function getImageApiProtocol(dataOrProtocol?: ImageGeneratorNodeData | ImageApiProtocol | unknown): ImageApiProtocol {
+  if (typeof dataOrProtocol === "string" && dataOrProtocol in imageApiProtocolConfigs) {
+    return dataOrProtocol as ImageApiProtocol;
+  }
+
+  const data = dataOrProtocol as (Partial<ImageGeneratorNodeData> & { engine?: unknown }) | undefined;
+  if (data?.apiProtocol && data.apiProtocol in imageApiProtocolConfigs) {
+    return data.apiProtocol;
+  }
+
+  return getImageApiProtocolFromEngine(data?.engine);
+}
+
+export function getImageApiProtocolConfig(dataOrProtocol?: ImageGeneratorNodeData | ImageApiProtocol | unknown): ImageApiProtocolConfig {
+  return imageApiProtocolConfigs[getImageApiProtocol(dataOrProtocol)];
+}
+
+export function getDefaultImageGeneratorData(protocol: ImageApiProtocol = defaultImageApiProtocol): ImageGeneratorNodeData {
+  const config = getImageApiProtocolConfig(protocol);
   return {
     label: "绘图生成",
-    engine,
+    apiProtocol: protocol,
     model: config.defaultModel,
+    prompt: "",
     aspectRatio: config.aspectRatios?.[0]?.value || "1:1",
     imageSize: config.imageSizes?.[0]?.value || "1K",
     size: "auto",
     sizeMode: "preset",
-    quality: config.hasDalleQuality ? "standard" : "auto",
+    quality: "auto",
     background: "auto",
     outputFormat: "png",
     moderation: "auto",
-    guidanceScale: 5,
-    watermark: false,
-    negativePrompt: "",
+    inputFidelity: "auto",
+    n: 1,
     status: "idle",
   };
 }
@@ -373,10 +307,34 @@ export function parseGptImageSize(size?: string): { width: number; height: numbe
 }
 
 const gptImageSizePresetValues = new Set(
-  gptImageSizePresetOptions
+  gptImage2SizePresetOptions
     .map((opt) => opt.value)
     .filter((value): value is GptImageSize => value !== "custom")
 );
+
+const gptImageFixedSizeValues = new Set(gptImageFixedSizeOptions.map((opt) => opt.value));
+
+export function getGeminiAspectRatioOptions(model?: string) {
+  if (model === "gemini-3.1-flash-image-preview") return nb2AspectRatioOptions;
+  if (model === "gemini-3-pro-image-preview") return proAspectRatioOptions;
+  if (model === "gemini-2.5-flash-image") return basicAspectRatioOptions;
+  return nb2AspectRatioOptions;
+}
+
+export function getGeminiImageSizeOptions(model?: string) {
+  if (model === "gemini-3.1-flash-image-preview") return nb2ImageSizeOptions;
+  if (model === "gemini-3-pro-image-preview") return imageSizeOptions;
+  if (model === "gemini-2.5-flash-image") return undefined;
+  return nb2ImageSizeOptions;
+}
+
+export function getOpenAIImageSizeOptions(model?: string) {
+  return model === "gpt-image-2" ? gptImage2SizePresetOptions : gptImageFixedSizeOptions;
+}
+
+export function supportsCustomOpenAIImageSize(model?: string) {
+  return model === "gpt-image-2";
+}
 
 export function getGptImageCustomDimensions(data: ImageGeneratorNodeData) {
   const parsedSize = parseGptImageSize(data.size);
@@ -391,13 +349,22 @@ export function getGptImageSizeMode(data: ImageGeneratorNodeData): GptImageSizeM
   return data.size && !gptImageSizePresetValues.has(data.size) ? "custom" : "preset";
 }
 
-export function getResolvedGptImageSize(data: ImageGeneratorNodeData): GptImageSize {
+function getResolvedCustomOpenAIImageSize(data: ImageGeneratorNodeData): GptImageSize {
   if (getGptImageSizeMode(data) !== "custom") {
     return data.size || "auto";
   }
 
   const { width, height } = getGptImageCustomDimensions(data);
   return `${width}x${height}`;
+}
+
+export function getResolvedOpenAIImageSize(data: ImageGeneratorNodeData): GptImageSize {
+  if (supportsCustomOpenAIImageSize(data.model)) {
+    return getResolvedCustomOpenAIImageSize(data);
+  }
+
+  const size = data.size || "auto";
+  return gptImageFixedSizeValues.has(size) ? size : "auto";
 }
 
 export function validateGptImage2Size(size: GptImageSize): string | undefined {
@@ -426,9 +393,89 @@ export function getGptImageBackgroundOptions(model: string) {
 }
 
 export function getImageModelDisplayName(data: ImageGeneratorNodeData) {
-  const config = getImageEngineConfig(data.engine);
+  const config = getImageApiProtocolConfig(data);
   const preset = config.presetModels.find((opt) => opt.value === data.model);
   return preset ? preset.label : data.model;
+}
+
+export function getImageProtocolDisplayName(data: ImageGeneratorNodeData) {
+  return getImageApiProtocolConfig(data).label;
+}
+
+export function getImageGeneratorSizeLabel(data: ImageGeneratorNodeData): string {
+  const config = getImageApiProtocolConfig(data);
+  const model = data.model || config.defaultModel;
+
+  if (config.hasOpenAIImageControls) {
+    return getResolvedOpenAIImageSize({ ...data, model });
+  }
+
+  if (config.hasGeminiImageControls) {
+    const aspectRatioOptions = getGeminiAspectRatioOptions(model);
+    const aspectRatio = aspectRatioOptions.some((opt) => opt.value === data.aspectRatio)
+      ? data.aspectRatio
+      : aspectRatioOptions[0]?.value;
+    const imageSizeOptions = getGeminiImageSizeOptions(model);
+    const imageSize = imageSizeOptions?.some((opt) => opt.value === data.imageSize)
+      ? data.imageSize
+      : imageSizeOptions?.[0]?.value;
+
+    return [aspectRatio, imageSize].filter(Boolean).join(" · ") || "自动";
+  }
+
+  return data.imageSize || data.aspectRatio || "自动";
+}
+
+function getOptionLabel<T extends readonly { value: string; label: string }[]>(
+  options: T,
+  value?: string
+) {
+  return options.find((opt) => opt.value === value)?.label || value;
+}
+
+export function getImageGeneratorParameterLabels(data: ImageGeneratorNodeData): string[] {
+  const config = getImageApiProtocolConfig(data);
+  const model = data.model || config.defaultModel;
+
+  if (config.hasOpenAIImageControls) {
+    const outputFormat = data.outputFormat || "png";
+    const labels = [
+      `尺寸 ${getResolvedOpenAIImageSize({ ...data, model })}`,
+      `质量 ${getOptionLabel(gptImageQualityOptions, data.quality || "auto")}`,
+      `${data.n || 1} 张`,
+      `背景 ${getOptionLabel(getGptImageBackgroundOptions(model), data.background || "auto")}`,
+      `格式 ${getOptionLabel(gptImageOutputFormatOptions, outputFormat)}`,
+      `审核 ${getOptionLabel(gptImageModerationOptions, data.moderation || "auto")}`,
+    ];
+
+    if ((outputFormat === "jpeg" || outputFormat === "webp") && typeof data.outputCompression === "number") {
+      labels.push(`压缩 ${data.outputCompression}`);
+    }
+
+    if (model !== "gpt-image-2" && data.inputFidelity && data.inputFidelity !== "auto") {
+      labels.push(`保真 ${getOptionLabel(gptImageInputFidelityOptions, data.inputFidelity)}`);
+    }
+
+    return labels;
+  }
+
+  if (config.hasGeminiImageControls) {
+    const aspectRatioOptions = getGeminiAspectRatioOptions(model);
+    const aspectRatio = aspectRatioOptions.some((opt) => opt.value === data.aspectRatio)
+      ? data.aspectRatio
+      : aspectRatioOptions[0]?.value;
+    const imageSizeOptions = getGeminiImageSizeOptions(model);
+    const imageSize = imageSizeOptions?.some((opt) => opt.value === data.imageSize)
+      ? data.imageSize
+      : imageSizeOptions?.[0]?.value;
+
+    return [
+      aspectRatio ? `比例 ${aspectRatio}` : undefined,
+      imageSize ? `尺寸 ${imageSize}` : undefined,
+    ].filter((label): label is string => Boolean(label));
+  }
+
+  return [getImageGeneratorSizeLabel(data)];
 }
 
 export function buildImageGenerationRequest(
@@ -437,54 +484,52 @@ export function buildImageGenerationRequest(
   inputImages?: string[],
   maskImage?: string
 ): ImageGenerationRequest {
-  const config = getImageEngineConfig(data.engine);
+  const config = getImageApiProtocolConfig(data);
   const base: ImageGenerationRequest = {
     prompt,
     model: data.model || config.defaultModel,
+    apiProtocol: config.protocol,
     inputImages,
     maskImage,
     aspectRatio: data.aspectRatio,
   };
 
-  if (config.hasImageSize) {
+  if (config.hasGeminiImageControls) {
+    const aspectRatioOptionsForModel = getGeminiAspectRatioOptions(base.model);
+    const imageSizeOptionsForModel = getGeminiImageSizeOptions(base.model);
+    const aspectRatio = aspectRatioOptionsForModel.some((opt) => opt.value === data.aspectRatio)
+      ? data.aspectRatio
+      : aspectRatioOptionsForModel[0]?.value;
+
     return {
       ...base,
-      imageSize: data.imageSize || config.imageSizes?.[0]?.value,
+      aspectRatio,
+      imageSize: imageSizeOptionsForModel
+        ? imageSizeOptionsForModel.some((opt) => opt.value === data.imageSize)
+          ? data.imageSize
+          : imageSizeOptionsForModel[0]?.value
+        : undefined,
     };
   }
 
-  if (config.hasGptImageControls) {
+  if (config.hasOpenAIImageControls) {
+    const outputFormat = data.outputFormat || "png";
+    const inputFidelity = data.inputFidelity && data.inputFidelity !== "auto" && base.model !== "gpt-image-2"
+      ? data.inputFidelity
+      : undefined;
+
     return {
       ...base,
-      size: getResolvedGptImageSize(data),
+      size: getResolvedOpenAIImageSize({ ...data, model: base.model }),
       quality: data.quality || "auto",
       background: data.background || "auto",
-      outputFormat: data.outputFormat || "png",
-      outputCompression: data.outputCompression,
+      outputFormat,
+      outputCompression: outputFormat === "jpeg" || outputFormat === "webp"
+        ? data.outputCompression ?? 100
+        : undefined,
       moderation: data.moderation || "auto",
-    };
-  }
-
-  if (config.hasDalleQuality) {
-    return {
-      ...base,
-      quality: data.quality || "standard",
-      imageSize: data.quality === "hd" ? "4K" : undefined,
-    };
-  }
-
-  if (config.hasGuidanceScale || config.hasWatermark) {
-    return {
-      ...base,
-      guidanceScale: data.guidanceScale,
-      watermark: data.watermark,
-    };
-  }
-
-  if (config.hasNegativePrompt) {
-    return {
-      ...base,
-      negativePrompt: data.negativePrompt || undefined,
+      inputFidelity,
+      n: data.n || 1,
     };
   }
 

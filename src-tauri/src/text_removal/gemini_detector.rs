@@ -8,10 +8,10 @@ use std::time::Duration;
 /// 检测到的文本区域
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TextRegion {
-    pub box_2d: [i32; 4],  // [ymin, xmin, ymax, xmax]，归一化到 0-1000
+    pub box_2d: [i32; 4], // [ymin, xmin, ymax, xmax]，归一化到 0-1000
     pub label: String,
     #[serde(default)]
-    pub polygon: Vec<Vec<i32>>,  // [[y1,x1], [y2,x2], ...]，归一化到 0-1000
+    pub polygon: Vec<Vec<i32>>, // [[y1,x1], [y2,x2], ...]，归一化到 0-1000
 }
 
 /// 检测结果
@@ -130,9 +130,9 @@ fn is_valid_detection_result(text: &str) -> bool {
     let json_str = parse_json(text);
     if let Ok(data) = serde_json::from_str::<serde_json::Value>(&json_str) {
         if let Some(arr) = data.as_array() {
-            return arr.iter().any(|item| {
-                item.is_object() && item.get("box_2d").is_some()
-            });
+            return arr
+                .iter()
+                .any(|item| item.is_object() && item.get("box_2d").is_some());
         }
     }
     false
@@ -158,7 +158,11 @@ pub async fn detect_text(
     // 第一轮：自由格式输出（带重试）
     println!("[Rust] Gemini 第一轮检测...");
     let round1_result = detect_text_round1(&client, &url, image_base64).await?;
-    println!("[Rust] 第一轮结果长度: {} 字符, 有效: {}", round1_result.text.len(), round1_result.is_valid);
+    println!(
+        "[Rust] 第一轮结果长度: {} 字符, 有效: {}",
+        round1_result.text.len(),
+        round1_result.is_valid
+    );
 
     // 第二轮：结构化规范化（无论第一轮是否包含 box_2d 都执行）
     println!("[Rust] Gemini 第二轮结构化...");
@@ -200,7 +204,8 @@ pub async fn extract_text_styles(
     }
     let list_text = list_lines.join("\n");
 
-    let prompt = format!(r##"
+    let prompt = format!(
+        r##"
 分析这张图片中以下文字区域的样式信息：
 
 {}
@@ -213,7 +218,9 @@ pub async fn extract_text_styles(
 要求：
 - index 为区域序号（与上面列表一致，0-based）
 - 如果无法判断，请使用默认值：color_hex="#333333", font_size=24, is_bold=false
-"##, list_text);
+"##,
+        list_text
+    );
 
     let schema = serde_json::json!({
         "type": "object",
@@ -261,7 +268,10 @@ pub async fn extract_text_styles(
         .map_err(|e| format!("样式提取请求失败: {}", e))?;
 
     let status = response.status();
-    let response_text = response.text().await.map_err(|e| format!("读取响应失败: {}", e))?;
+    let response_text = response
+        .text()
+        .await
+        .map_err(|e| format!("读取响应失败: {}", e))?;
 
     if !status.is_success() {
         return Err(format!("API 返回错误 ({}): {}", status, response_text));
@@ -274,7 +284,8 @@ pub async fn extract_text_styles(
         return Err(format!("Gemini API 错误: {}", error.message));
     }
 
-    let text = gemini_response.candidates
+    let text = gemini_response
+        .candidates
         .as_ref()
         .and_then(|c| c.first())
         .and_then(|c| c.content.as_ref())
@@ -282,8 +293,8 @@ pub async fn extract_text_styles(
         .and_then(|p| p.text.as_ref())
         .ok_or("样式提取无响应")?;
 
-    let result: StructuredStyleResult = serde_json::from_str(text)
-        .map_err(|e| format!("解析样式结果失败: {} - {}", e, text))?;
+    let result: StructuredStyleResult =
+        serde_json::from_str(text).map_err(|e| format!("解析样式结果失败: {} - {}", e, text))?;
 
     Ok(result.styles)
 }
@@ -332,10 +343,18 @@ async fn detect_text_round1(
         match client.post(url).json(&request_body).send().await {
             Ok(resp) => {
                 let status = resp.status();
-                let response_text = resp.text().await.map_err(|e| format!("读取响应失败: {}", e))?;
+                let response_text = resp
+                    .text()
+                    .await
+                    .map_err(|e| format!("读取响应失败: {}", e))?;
 
                 if !status.is_success() {
-                    println!("[Rust] 第一轮尝试 {}/{} API 错误: {}", attempt + 1, max_retries, response_text);
+                    println!(
+                        "[Rust] 第一轮尝试 {}/{} API 错误: {}",
+                        attempt + 1,
+                        max_retries,
+                        response_text
+                    );
                     if attempt < max_retries - 1 {
                         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
                         continue;
@@ -346,7 +365,12 @@ async fn detect_text_round1(
                 match serde_json::from_str::<GeminiResponse>(&response_text) {
                     Ok(response) => {
                         if let Some(error) = response.error {
-                            println!("[Rust] 第一轮尝试 {}/{} API 错误: {}", attempt + 1, max_retries, error.message);
+                            println!(
+                                "[Rust] 第一轮尝试 {}/{} API 错误: {}",
+                                attempt + 1,
+                                max_retries,
+                                error.message
+                            );
                             if attempt < max_retries - 1 {
                                 tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
                                 continue;
@@ -354,7 +378,8 @@ async fn detect_text_round1(
                             return Err(format!("Gemini API 错误: {}", error.message));
                         }
 
-                        if let Some(parts) = response.candidates
+                        if let Some(parts) = response
+                            .candidates
                             .as_ref()
                             .and_then(|c| c.first())
                             .and_then(|c| c.content.as_ref())
@@ -372,24 +397,42 @@ async fn detect_text_round1(
                             last_raw_result = Some(text.clone());
 
                             if is_valid_detection_result(&text) {
-                                println!("[Rust] 第一轮尝试 {}/{}: 成功，检测到有效结果", attempt + 1, max_retries);
+                                println!(
+                                    "[Rust] 第一轮尝试 {}/{}: 成功，检测到有效结果",
+                                    attempt + 1,
+                                    max_retries
+                                );
                                 return Ok(Round1Result {
                                     text: text.clone(),
                                     is_valid: true,
                                 });
                             } else {
-                                println!("[Rust] 第一轮尝试 {}/{}: 结果不含 box_2d，将交给第二轮处理", attempt + 1, max_retries);
+                                println!(
+                                    "[Rust] 第一轮尝试 {}/{}: 结果不含 box_2d，将交给第二轮处理",
+                                    attempt + 1,
+                                    max_retries
+                                );
                                 // 继续重试，但保存响应以备用
                             }
                         }
                     }
                     Err(e) => {
-                        println!("[Rust] 第一轮尝试 {}/{} 解析失败: {}", attempt + 1, max_retries, e);
+                        println!(
+                            "[Rust] 第一轮尝试 {}/{} 解析失败: {}",
+                            attempt + 1,
+                            max_retries,
+                            e
+                        );
                     }
                 }
             }
             Err(e) => {
-                println!("[Rust] 第一轮尝试 {}/{} 网络失败: {}", attempt + 1, max_retries, e);
+                println!(
+                    "[Rust] 第一轮尝试 {}/{} 网络失败: {}",
+                    attempt + 1,
+                    max_retries,
+                    e
+                );
             }
         }
 
@@ -416,7 +459,8 @@ async fn normalize_detection_result(
     url: &str,
     raw_result: &str,
 ) -> Result<Vec<TextRegion>, String> {
-    let prompt = format!(r#"
+    let prompt = format!(
+        r#"
 请解析以下文字检测结果，转换为规范化的格式。
 
 原始检测结果：
@@ -429,7 +473,9 @@ async fn normalize_detection_result(
 4. 所有坐标保持 0-1000 的归一化范围
 5. 确保边界框紧密包围文字区域
 6. 若有极小或难以识别的字形残留，也需要保留其区域
-"#, raw_result);
+"#,
+        raw_result
+    );
 
     // JSON Schema
     let schema = serde_json::json!({
@@ -484,7 +530,10 @@ async fn normalize_detection_result(
         .map_err(|e| format!("第二轮请求失败: {}", e))?;
 
     let status = response.status();
-    let response_text = response.text().await.map_err(|e| format!("读取响应失败: {}", e))?;
+    let response_text = response
+        .text()
+        .await
+        .map_err(|e| format!("读取响应失败: {}", e))?;
 
     if !status.is_success() {
         return Err(format!("API 返回错误 ({}): {}", status, response_text));
@@ -497,7 +546,8 @@ async fn normalize_detection_result(
         return Err(format!("Gemini API 错误: {}", error.message));
     }
 
-    let text = gemini_response.candidates
+    let text = gemini_response
+        .candidates
         .as_ref()
         .and_then(|c| c.first())
         .and_then(|c| c.content.as_ref())
@@ -505,8 +555,8 @@ async fn normalize_detection_result(
         .and_then(|p| p.text.as_ref())
         .ok_or("第二轮调用无响应")?;
 
-    let result: StructuredResult = serde_json::from_str(text)
-        .map_err(|e| format!("解析结构化结果失败: {} - {}", e, text))?;
+    let result: StructuredResult =
+        serde_json::from_str(text).map_err(|e| format!("解析结构化结果失败: {} - {}", e, text))?;
 
     println!("[Rust] 第二轮规范化完成: {} 个文字块", result.regions.len());
 

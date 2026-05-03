@@ -663,12 +663,12 @@ export function FlowCanvas() {
         defaultEdgeOptions={{
           type: "smoothstep",
           animated: true,
-          style: { strokeWidth: 2, stroke: "#9ca3af" },
+          style: { strokeWidth: 2, stroke: "var(--nc-subtle)" },
         }}
         proOptions={{ hideAttribution: true }}
       >
         <Controls
-          className="!bg-base-100 !border-base-300 !shadow-lg"
+          className="!bg-base-100 !border-base-300"
           showZoom
           showFitView
           showInteractive={false}
@@ -699,7 +699,7 @@ export function FlowCanvas() {
           variant={BackgroundVariant.Dots}
           gap={20}
           size={1}
-          color="#d1d5db"
+          color="rgba(97,93,89,0.28)"
         />
       </ReactFlow>
 
@@ -713,7 +713,7 @@ export function FlowCanvas() {
       {/* 裁剪模式提示 */}
       {trimMode && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50">
-          <div className="flex items-center gap-2 px-4 py-2 bg-error text-error-content rounded-lg shadow-lg">
+          <div className="flex items-center gap-2 px-4 py-2 bg-error text-error-content rounded-lg shadow-[var(--nc-shadow-card)]">
             <Scissors className="w-4 h-4" />
             <span className="text-sm font-medium">裁剪模式：点击节点或连线可删除</span>
             <button

@@ -1,5 +1,7 @@
 import type { Node, Edge } from "@xyflow/react";
 import type { ImageGeneratorNodeData } from "@/components/nodes/imageGeneratorConfig";
+import type { VideoGeneratorNodeData } from "@/components/nodes/videoGeneratorConfig";
+import type { LLMContentNodeData } from "@/components/nodes/llmContentConfig";
 
 // 详细错误信息结构
 export interface ErrorDetails {
@@ -24,17 +26,17 @@ export type ModelType = string;
 // 视频模型类型 - 支持自定义模型名称
 export type VideoModelType = string;
 
-// 视频尺寸类型
-export type VideoSizeType = "720x1280" | "1280x720" | "1024x1792" | "1792x1024";
+// 视频尺寸类型（兼容旧节点数据，统一视频节点使用 videoGeneratorConfig 中的协议配置）
+export type VideoSizeType = string;
 
 // LLM 模型类型（支持自定义模型名称）
 export type LLMModelType = string;
 
-// 视频生成参数
+// 视频生成参数（兼容旧调用类型）
 export interface VideoGenerationParams {
   prompt: string;
   model: VideoModelType;
-  seconds?: "10" | "15" | "25";  // sora-2: 10/15, sora-2-pro: 10/15/25
+  seconds?: string;
   size?: VideoSizeType;
   inputImage?: string; // base64 编码的参考图片
 }
@@ -117,34 +119,10 @@ export interface TextOutputNodeData {
   text?: string;
 }
 
-export interface VideoGeneratorNodeData {
-  [key: string]: unknown;
-  label: string;
-  model: VideoModelType;
-  seconds: VideoGenerationParams["seconds"];
-  size?: VideoSizeType;
-  status: "idle" | "loading" | "success" | "error";
-  taskId?: string;
-  taskStage?: "queued" | "in_progress" | "completed" | "failed"; // 任务阶段
-  progress?: number;
-  outputVideo?: string; // 视频 URL
-  error?: string;
-  errorDetails?: ErrorDetails;  // 详细错误信息
-}
+export type { VideoGeneratorNodeData } from "@/components/nodes/videoGeneratorConfig";
 
 // LLM 内容生成节点数据
-export interface LLMContentNodeData {
-  [key: string]: unknown;
-  label: string;
-  model: LLMModelType;
-  systemPrompt: string;
-  temperature: number;
-  maxTokens: number;
-  status: "idle" | "loading" | "success" | "error";
-  outputContent?: string;
-  error?: string;
-  errorDetails?: ErrorDetails;  // 详细错误信息
-}
+export type { LLMContentNodeData } from "@/components/nodes/llmContentConfig";
 
 // 文件上传节点数据
 export interface FileUploadNodeData {
@@ -208,15 +186,16 @@ export interface Provider {
 
 // 节点类型到供应商的映射
 export interface NodeProviderMapping {
-  imageGeneratorPro?: string;   // Pro 图片节点使用的供应商 ID
-  imageGeneratorFast?: string;  // Fast 图片节点使用的供应商 ID
-  imageGeneratorNB2?: string;   // NanoBanana2 图片节点使用的供应商 ID
-  dalleGenerator?: string;      // DALL-E 图片节点使用的供应商 ID
+  imageGeneratorPro?: string;   // Gemini Pro 图片协议使用的供应商 ID
+  imageGeneratorFast?: string;  // Gemini Fast 图片协议使用的供应商 ID
+  imageGeneratorNB2?: string;   // Gemini generateContent 图片协议使用的供应商 ID
+  dalleGenerator?: string;      // 旧版 DALL-E 图片节点使用的供应商 ID
   fluxGenerator?: string;       // Flux 图片节点使用的供应商 ID
-  gptImageGenerator?: string;   // GPT Image 图片节点使用的供应商 ID
+  gptImageGenerator?: string;   // OpenAI Images API 图片协议使用的供应商 ID
   doubaoGenerator?: string;     // 豆包图片节点使用的供应商 ID
   zImageGenerator?: string;     // Z-Image 图片节点使用的供应商 ID
   videoGenerator?: string;      // 视频节点使用的供应商 ID
+  newApiVideoGenerator?: string; // new-api 通用视频协议使用的供应商 ID
   veoGenerator?: string;        // Veo 视频节点使用的供应商 ID
   klingGenerator?: string;      // Kling 视频节点使用的供应商 ID
   llm?: string;                 // PPT 内容生成节点使用的 LLM 供应商 ID
@@ -234,10 +213,11 @@ export const NODE_ALLOWED_PROTOCOLS: Record<keyof NodeProviderMapping, ProviderP
   doubaoGenerator: ["openai"],
   zImageGenerator: ["openai"],  // Z-Image 使用 OpenAI DALL-E 格式
   videoGenerator: ["openai"],
+  newApiVideoGenerator: ["openai"],
   veoGenerator: ["openai", "google"],  // Veo 支持 OpenAI 兼容和 Google 协议
   klingGenerator: ["openai"],  // Kling 使用 OpenAI 兼容协议
-  llm: ["google", "openai", "claude"],
-  llmContent: ["google", "openai", "claude"],
+  llm: ["google", "openai", "openaiResponses", "claude"],
+  llmContent: ["google", "openai", "openaiResponses", "claude"],
 };
 
 // 应用设置

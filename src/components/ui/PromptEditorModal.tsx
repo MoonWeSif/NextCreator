@@ -111,7 +111,7 @@ export function PromptEditorModal({
       {/* Modal 内容 */}
       <div
         className={`
-          w-full max-w-2xl bg-base-100 rounded-2xl shadow-2xl overflow-hidden
+          nc-panel w-full max-w-2xl rounded-2xl overflow-hidden
           transition-all duration-200 ease-out
           ${isVisible && !isClosing
             ? "opacity-100 scale-100 translate-y-0"
@@ -121,13 +121,15 @@ export function PromptEditorModal({
         onClick={(e) => e.stopPropagation()}
       >
         {/* 头部 */}
-        <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-blue-500 to-blue-600">
+        <div className="nc-node-header nc-node-header-accent nc-node-accent-blue px-4 py-3">
           <div className="flex items-center gap-2">
-            <MessageSquare className="w-5 h-5 text-white" />
-            <span className="text-base font-medium text-white">{title}</span>
+            <span className="nc-node-header-icon">
+              <MessageSquare className="w-5 h-5" />
+            </span>
+            <span className="text-base font-semibold">{title}</span>
           </div>
           <button
-            className="btn btn-circle btn-ghost btn-sm text-white hover:bg-white/20"
+            className="btn btn-circle btn-ghost btn-sm"
             onClick={handleClose}
           >
             <X className="w-4 h-4" />

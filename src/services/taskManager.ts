@@ -12,6 +12,7 @@ import type { VideoGeneratorNodeData } from "@/types";
 import { pollVideoTask, type VideoProgressInfo } from "./videoGeneration";
 import type { VeoGeneratorNodeData } from "@/components/nodes/VeoGeneratorNode";
 import type { KlingGeneratorNodeData } from "@/components/nodes/KlingGeneratorNode";
+import { getVideoApiProtocol } from "@/components/nodes/videoGeneratorConfig";
 
 // 任务状态
 export type TaskStatus = "running" | "completed" | "failed" | "cancelled";
@@ -116,6 +117,9 @@ class TaskManager {
   ): Promise<void> {
     const task = this.tasks.get(taskKey);
     if (!task) return;
+    const nodeData = this.getCanvasNodeData(task.canvasId, task.nodeId) as VideoGeneratorNodeData | undefined;
+    const apiProtocol = getVideoApiProtocol(nodeData);
+    const providerNodeType = apiProtocol === "newapi-video-generations" ? "newApiVideoGenerator" : "videoGenerator";
 
     try {
       await pollVideoTask(
@@ -134,7 +138,11 @@ class TaskManager {
 
           // 同步更新到节点数据（无论当前是否在该画布）
           this.syncToNode(taskKey, info);
-        }
+        },
+        120,
+        5000,
+        signal,
+        providerNodeType
       );
 
       // 轮询完成后更新状态
@@ -394,6 +402,16 @@ class TaskManager {
           : c
       ),
     }));
+  }
+
+  private getCanvasNodeData(canvasId: string, nodeId: string): unknown {
+    const { activeCanvasId } = useCanvasStore.getState();
+    if (activeCanvasId === canvasId) {
+      return useFlowStore.getState().nodes.find((node) => node.id === nodeId)?.data;
+    }
+
+    const canvas = useCanvasStore.getState().canvases.find(c => c.id === canvasId);
+    return canvas?.nodes.find((node) => node.id === nodeId)?.data;
   }
 
   /**

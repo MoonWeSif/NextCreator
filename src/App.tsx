@@ -172,12 +172,12 @@ function App() {
 
   return (
     <ReactFlowProvider>
-      <div className="flex flex-col h-screen w-screen overflow-hidden">
+      <div className="nc-app-shell flex flex-col h-screen w-screen overflow-hidden">
         {/* 顶部工具栏 */}
         <Toolbar onOpenHelp={() => setIsHelpOpen(true)} />
 
         {/* 主体内容 */}
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-1 overflow-hidden min-h-0">
           {/* 左侧导航栏（包含画布列表和节点库） */}
           <Sidebar onDragStart={onDragStart} />
 

@@ -13,7 +13,9 @@ pub fn generate_mask(regions: &[TextRegion], width: u32, height: u32, dilation: 
         // 优先使用 polygon
         if region.polygon.len() >= 3 {
             // 转换多边形坐标
-            let points: Vec<(i32, i32)> = region.polygon.iter()
+            let points: Vec<(i32, i32)> = region
+                .polygon
+                .iter()
                 .filter(|p| p.len() >= 2)
                 .map(|p| {
                     // polygon 格式是 [[y1,x1], [y2,x2], ...]
@@ -60,7 +62,12 @@ fn fill_polygon(mask: &mut GrayImage, points: &[(i32, i32)]) {
 
     let (width, height) = mask.dimensions();
     let min_y = points.iter().map(|p| p.1).min().unwrap().max(0);
-    let max_y = points.iter().map(|p| p.1).max().unwrap().min(height as i32 - 1);
+    let max_y = points
+        .iter()
+        .map(|p| p.1)
+        .max()
+        .unwrap()
+        .min(height as i32 - 1);
 
     for y in min_y..=max_y {
         let mut intersections = Vec::new();
@@ -179,7 +186,7 @@ mod tests {
     #[test]
     fn test_generate_mask_with_box() {
         let regions = vec![TextRegion {
-            box_2d: [100, 100, 200, 300],  // ymin, xmin, ymax, xmax (0-1000)
+            box_2d: [100, 100, 200, 300], // ymin, xmin, ymax, xmax (0-1000)
             label: "测试".to_string(),
             polygon: vec![],
         }];

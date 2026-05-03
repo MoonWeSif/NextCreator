@@ -611,8 +611,8 @@ export const PPTAssemblerNode = memo(({ id, data, selected }: NodeProps<PPTAssem
     <>
       <div
         className={`
-          w-[280px] rounded-xl bg-base-100 shadow-lg border-2
-          ${selected ? "border-primary shadow-primary/20" : "border-base-300"}
+          nc-node-card nc-node-accent-emerald w-[280px]
+          ${selected ? "nc-node-card-selected" : ""}
         `}
       >
         {!isOverlay && (
@@ -626,12 +626,14 @@ export const PPTAssemblerNode = memo(({ id, data, selected }: NodeProps<PPTAssem
         )}
 
         {/* 节点头部 */}
-        <div className="flex items-center justify-between px-3 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-t-lg">
+        <div className="nc-node-header nc-node-header-accent">
           <div className="flex items-center gap-2">
-            <Presentation className="w-4 h-4 text-white" />
-            <span className="text-sm font-medium text-white">{data.label}</span>
+            <span className="nc-node-header-icon">
+              <Presentation className="w-4 h-4" />
+            </span>
+            <span className="text-sm font-semibold truncate">{data.label}</span>
           </div>
-          <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded text-white">
+          <span className="nc-badge">
             导出
           </span>
         </div>

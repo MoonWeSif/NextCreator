@@ -19,7 +19,9 @@ import type { ErrorDetails } from "@/types";
 interface TauriOpenAIImageResult {
   success: boolean;
   imageData?: string;
+  imageDataList?: string[];
   imageUrl?: string;
+  imageUrls?: string[];
   revisedPrompt?: string;
   error?: string;
 }
@@ -155,6 +157,7 @@ export class GptImageProvider implements ImageGenerationProvider {
       outputFormat: request.outputFormat || "png",
       outputCompression: request.outputCompression,
       moderation: request.moderation || "auto",
+      n: request.n || 1,
       inputFidelity: isGptImage2 ? undefined : request.inputFidelity,
     };
   }
@@ -222,6 +225,7 @@ export class GptImageProvider implements ImageGenerationProvider {
             imageUrl: result.imageUrl,
             revisedPrompt: result.revisedPrompt,
             hasImageData: !!result.imageData,
+            imageCount: result.imageDataList?.length ?? 0,
           },
         },
       };
@@ -229,6 +233,7 @@ export class GptImageProvider implements ImageGenerationProvider {
 
     return {
       imageData: result.imageData,
+      imageDataList: result.imageDataList?.length ? result.imageDataList : [result.imageData],
       metadata: {
         model: request.model,
         revisedPrompt: result.revisedPrompt,
